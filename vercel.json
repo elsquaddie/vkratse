@@ -13,12 +13,5 @@
       "dest": "api/index.py"
     }
   ],
-  "env": {
-    "TELEGRAM_BOT_TOKEN": "@telegram_bot_token",
-    "ANTHROPIC_API_KEY": "@anthropic_api_key",
-    "SUPABASE_URL": "@supabase_url",
-    "SUPABASE_KEY": "@supabase_key",
-    "SECRET_KEY": "@secret_key"
-  },
   "regions": ["iad1"]
 }

@@ -241,19 +241,37 @@ def handler(request):
         }
 
 
+# Export handler for Vercel
+# Vercel Python runtime expects a callable named 'handler' or 'app'
+def app(environ, start_response):
+    """WSGI app for Vercel"""
+    # Import request wrapper
+    from werkzeug.wrappers import Request, Response
+
+    request = Request(environ)
+    result = handler(request)
+
+    response = Response(
+        result.get('body', '{}'),
+        status=result.get('statusCode', 200),
+        content_type='application/json'
+    )
+    return response(environ, start_response)
+
+
 # For testing locally with Flask
 if __name__ == '__main__':
     from flask import Flask, request as flask_request
 
-    app = Flask(__name__)
+    flask_app = Flask(__name__)
 
-    @app.route('/', methods=['POST'])
+    @flask_app.route('/', methods=['POST'])
     def webhook():
         return handler(flask_request)
 
-    @app.route('/health', methods=['GET'])
+    @flask_app.route('/health', methods=['GET'])
     def health():
         return {'status': 'ok', 'bot': 'chto_bilo_v_chate_bot'}
 
     logger.info("Starting local test server...")
-    app.run(host='0.0.0.0', port=8000, debug=True)
+    flask_app.run(host='0.0.0.0', port=8000, debug=True)

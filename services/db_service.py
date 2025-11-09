@@ -297,3 +297,23 @@ class DBService:
             logger.debug(f"Logged event: {event_type} for user {user_id}")
         except Exception as e:
             logger.error(f"Error logging event: {e}")
+
+    def get_user_stats(self, user_id: int) -> dict:
+        """Get user statistics from analytics table"""
+        try:
+            response = self.client.table('analytics')\
+                .select('event_type')\
+                .eq('user_id', user_id)\
+                .execute()
+
+            # Count events by type
+            stats = {}
+            for event in response.data:
+                event_type = event['event_type']
+                stats[event_type] = stats.get(event_type, 0) + 1
+
+            logger.debug(f"Retrieved stats for user {user_id}: {stats}")
+            return stats
+        except Exception as e:
+            logger.error(f"Error getting user stats: {e}")
+            return {}

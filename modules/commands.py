@@ -93,3 +93,38 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 Пиши @your_support_username (если есть)"""
 
     await update.message.reply_text(help_text)
+
+
+async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Handle /stats command
+    Show user statistics
+    """
+    from services import DBService
+
+    user = update.effective_user
+    logger.info(f"User {user.id} requested stats")
+
+    db = DBService()
+    stats = db.get_user_stats(user.id)
+
+    if not stats:
+        await update.message.reply_text(
+            "📊 Статистика пока пуста.\n\n"
+            f"Используй команды /{config.COMMAND_SUMMARY} и /{config.COMMAND_JUDGE} "
+            f"чтобы накопить статистику!"
+        )
+        return
+
+    # Format statistics
+    summary_count = stats.get('summary', 0) + stats.get('summary_dm', 0)
+    judge_count = stats.get('judge', 0)
+
+    stats_text = f"""📊 Твоя статистика
+
+🔍 Саммари создано: {summary_count}
+⚖️ Споров рассужено: {judge_count}
+
+Продолжай пользоваться ботом! 🚀"""
+
+    await update.message.reply_text(stats_text)

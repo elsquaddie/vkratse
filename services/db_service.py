@@ -155,7 +155,8 @@ class DBService:
         name: str,
         display_name: str,
         system_prompt: str,
-        created_by_user_id: int
+        created_by_user_id: int,
+        emoji: str = '🎭'
     ) -> Optional[int]:
         """Create a custom personality"""
         try:
@@ -163,6 +164,7 @@ class DBService:
                 'name': name,
                 'display_name': display_name,
                 'system_prompt': system_prompt,
+                'emoji': emoji,
                 'is_custom': True,
                 'created_by_user_id': created_by_user_id,
                 'is_active': True

@@ -1859,7 +1859,7 @@ def save_message(self, chat_id: int, user_id: Optional[int],
 ---
 
 ### 📌 ПУНКТ 3: Emoji в таблице personalities
-**Статус:** ⏳ Ожидает
+**Статус:** ✅ ЗАВЕРШЕНО
 **Файлы:** `sql/`, `models/personality.py`, `services/db_service.py`
 
 #### 3.1. Создать миграцию для добавления колонки emoji

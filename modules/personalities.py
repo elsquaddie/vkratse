@@ -13,7 +13,8 @@ from utils import sanitize_personality_prompt, is_valid_personality_name
 
 # Conversation states
 AWAITING_NAME = 1
-AWAITING_DESCRIPTION = 2
+AWAITING_EMOJI = 2
+AWAITING_DESCRIPTION = 3
 
 
 async def personality_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -196,10 +197,49 @@ async def receive_personality_name(update: Update, context: ContextTypes.DEFAULT
     # Save name in context
     context.user_data['personality_name'] = name
 
-    # Ask for description
+    # Ask for emoji
     await update.message.reply_text(
         f"🎭 Создание личности \"{name}\"\n\n"
-        f"Шаг 2 из 2\n\n"
+        f"Шаг 2 из 3\n\n"
+        f"Выбери emoji для своей личности.\n"
+        f"(один символ)\n\n"
+        f"💡 Примеры:\n"
+        f"• 🏴‍☠️ (пират)\n"
+        f"• ⚔️ (самурай)\n"
+        f"• 🌻 (хиппи)\n\n"
+        f"Отправь emoji или /cancel для отмены."
+    )
+
+    return AWAITING_EMOJI
+
+
+async def receive_personality_emoji(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Receive personality emoji (step 2)"""
+    user = update.effective_user
+    emoji = update.message.text.strip()
+    name = context.user_data.get('personality_name')
+
+    if not name:
+        await update.message.reply_text("❌ Ошибка: имя личности не найдено. Начни заново с /личность")
+        return ConversationHandler.END
+
+    logger.info(f"User {user.id} proposed emoji: {emoji} for personality '{name}'")
+
+    # Validate emoji (should be 1-4 characters, allowing for complex emoji)
+    if len(emoji) > 10 or len(emoji) == 0:
+        await update.message.reply_text(
+            "❌ Пожалуйста, отправь только один emoji.\n\n"
+            "Попробуй ещё раз или /cancel для отмены."
+        )
+        return AWAITING_EMOJI
+
+    # Save emoji in context
+    context.user_data['personality_emoji'] = emoji
+
+    # Ask for description
+    await update.message.reply_text(
+        f"🎭 Создание личности \"{name}\" {emoji}\n\n"
+        f"Шаг 3 из 3\n\n"
         f"Опиши стиль общения этой личности.\n"
         f"(от {config.MIN_PERSONALITY_DESCRIPTION_LENGTH} до "
         f"{config.MAX_PERSONALITY_DESCRIPTION_LENGTH} символов)\n\n"
@@ -214,10 +254,11 @@ async def receive_personality_name(update: Update, context: ContextTypes.DEFAULT
 
 
 async def receive_personality_description(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Receive personality description (step 2)"""
+    """Receive personality description (step 3)"""
     user = update.effective_user
     description = update.message.text.strip()
     name = context.user_data.get('personality_name')
+    emoji = context.user_data.get('personality_emoji', '🎭')
 
     if not name:
         await update.message.reply_text("❌ Ошибка: имя личности не найдено. Начни заново с /личность")
@@ -241,7 +282,8 @@ async def receive_personality_description(update: Update, context: ContextTypes.
         name=name,
         display_name=name.capitalize(),
         system_prompt=safe_prompt,
-        created_by_user_id=user.id
+        created_by_user_id=user.id,
+        emoji=emoji
     )
 
     if not personality_id:
@@ -255,13 +297,13 @@ async def receive_personality_description(update: Update, context: ContextTypes.
 
     # Success!
     await update.message.reply_text(
-        f"✅ Личность \"{name.capitalize()}\" создана и выбрана!\n\n"
+        f"✅ Личность \"{name.capitalize()}\" {emoji} создана и выбрана!\n\n"
         f"Теперь /{config.COMMAND_SUMMARY} и /{config.COMMAND_JUDGE} "
         f"будут отвечать в этом стиле.\n\n"
         f"Попробуй команду /{config.COMMAND_SUMMARY} в своём чате!"
     )
 
-    logger.info(f"User {user.id} created personality '{name}' (ID: {personality_id})")
+    logger.info(f"User {user.id} created personality '{name}' {emoji} (ID: {personality_id})")
 
     # Clear context
     context.user_data.clear()

@@ -1,10 +1,15 @@
 """
 Telegram Bot Webhook Handler
 Entry point for Vercel serverless function
+Based on working v3 code structure
 """
 
 import sys
 import traceback
+import json
+import asyncio
+import logging
+from http.server import BaseHTTPRequestHandler
 from telegram import Update
 from telegram.ext import (
     Application,
@@ -15,13 +20,20 @@ from telegram.ext import (
     filters
 )
 from telegram.constants import ChatType
-import json
 
-# Try to import config and log any errors
+# Setup basic logging first
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
+logger = logging.getLogger(__name__)
+
+# Try to import config
 try:
     import config
-    from config import logger
+    logger.info("✅ Config imported successfully")
 except Exception as e:
+    logger.error(f"❌ FATAL ERROR importing config: {e}", exc_info=True)
     print(f"FATAL ERROR importing config: {e}", file=sys.stderr)
     traceback.print_exc()
     raise
@@ -29,7 +41,9 @@ except Exception as e:
 # Try to import services
 try:
     from services import DBService
+    logger.info("✅ Services imported successfully")
 except Exception as e:
+    logger.error(f"❌ FATAL ERROR importing services: {e}", exc_info=True)
     print(f"FATAL ERROR importing services: {e}", file=sys.stderr)
     traceback.print_exc()
     raise
@@ -48,98 +62,17 @@ try:
         AWAITING_NAME,
         AWAITING_DESCRIPTION
     )
+    logger.info("✅ Modules imported successfully")
 except Exception as e:
+    logger.error(f"❌ FATAL ERROR importing modules: {e}", exc_info=True)
     print(f"FATAL ERROR importing modules: {e}", file=sys.stderr)
     traceback.print_exc()
     raise
 
 
-# Global application instance (will be initialized lazily)
-application = None
-
-
-def get_application():
-    """Get or create the Application instance (lazy initialization)"""
-    global application
-
-    if application is None:
-        logger.info("Initializing Telegram Application...")
-
-        if not config.TELEGRAM_BOT_TOKEN:
-            raise ValueError("TELEGRAM_BOT_TOKEN not set!")
-
-        try:
-            application = Application.builder().token(config.TELEGRAM_BOT_TOKEN).build()
-            setup_handlers()
-            logger.info("Application initialized successfully")
-        except Exception as e:
-            logger.error(f"Error initializing application: {e}", exc_info=True)
-            raise
-
-    return application
-
-
-def setup_handlers():
-    """Setup all command and message handlers"""
-    global application
-
-    if application is None:
-        raise RuntimeError("Application not initialized! Call get_application() first.")
-
-    # Basic commands
-    application.add_handler(CommandHandler("start", start_command))
-    application.add_handler(CommandHandler(config.COMMAND_HELP, help_command))
-
-    # Summary command
-    application.add_handler(CommandHandler(config.COMMAND_SUMMARY, summary_command))
-    application.add_handler(CallbackQueryHandler(
-        summary_callback,
-        pattern="^summary:"
-    ))
-
-    # Judge command
-    application.add_handler(CommandHandler(config.COMMAND_JUDGE, judge_command))
-
-    # Personality command with conversation for creating custom ones
-    personality_conv = ConversationHandler(
-        entry_points=[
-            CommandHandler(config.COMMAND_PERSONALITY, personality_command),
-            CallbackQueryHandler(personality_callback, pattern="^pers:")
-        ],
-        states={
-            AWAITING_NAME: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, receive_personality_name)
-            ],
-            AWAITING_DESCRIPTION: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, receive_personality_description)
-            ]
-        },
-        fallbacks=[
-            CommandHandler("cancel", cancel_personality_creation)
-        ],
-        name="personality_conversation",
-        persistent=False
-    )
-    application.add_handler(personality_conv)
-
-    # Log all messages to database
-    application.add_handler(MessageHandler(
-        filters.TEXT & ~filters.COMMAND,
-        log_message_to_db
-    ))
-
-    # Handle bot being added/removed from chats
-    application.add_handler(MessageHandler(
-        filters.StatusUpdate.NEW_CHAT_MEMBERS,
-        handle_bot_added_to_chat
-    ))
-    application.add_handler(MessageHandler(
-        filters.StatusUpdate.LEFT_CHAT_MEMBER,
-        handle_bot_removed_from_chat
-    ))
-
-    logger.info("All handlers registered")
-
+# ================================================
+# MESSAGE HANDLERS
+# ================================================
 
 async def log_message_to_db(update: Update, context) -> None:
     """Log all text messages to database"""
@@ -223,136 +156,164 @@ async def handle_bot_removed_from_chat(update: Update, context) -> None:
 
 
 # ================================================
-# VERCEL SERVERLESS FUNCTION HANDLER
+# VERCEL HANDLER (BaseHTTPRequestHandler style)
 # ================================================
 
-async def process_update(update_data: dict):
-    """Process a single update from Telegram"""
-    try:
-        app = get_application()
-        update = Update.de_json(update_data, app.bot)
-        await app.process_update(update)
-    except Exception as e:
-        logger.error(f"Error processing update: {e}", exc_info=True)
-        raise
+class handler(BaseHTTPRequestHandler):
+    """Vercel serverless function handler"""
 
-
-def handler(request):
-    """
-    Vercel serverless function handler
-
-    This is the entry point for webhook requests from Telegram
-    """
-    try:
-        logger.info(f"Handler called with method: {request.method}")
-
-        # Health check endpoint
-        if request.method == 'GET':
-            logger.info("Health check requested")
-            return {
-                'statusCode': 200,
-                'body': json.dumps({
-                    'status': 'ok',
-                    'bot': 'chto_bilo_v_chate_bot',
-                    'config': {
-                        'telegram_configured': bool(config.TELEGRAM_BOT_TOKEN),
-                        'anthropic_configured': bool(config.ANTHROPIC_API_KEY),
-                        'supabase_configured': bool(config.SUPABASE_URL and config.SUPABASE_KEY),
-                    }
-                })
-            }
-
-        # Only accept POST requests for webhooks
-        if request.method != 'POST':
-            logger.warning(f"Rejected {request.method} request")
-            return {
-                'statusCode': 405,
-                'body': json.dumps({'error': 'Method not allowed'})
-            }
-
-        # Parse update from request body
+    async def do_POST_async(self):
+        """Process webhook POST request asynchronously"""
         try:
-            if hasattr(request, 'get_json'):
-                # Flask request object
-                update_data = request.get_json(force=True)
-            elif hasattr(request, 'json'):
-                # Vercel request object
-                update_data = request.json
-            else:
-                # Try to parse body as JSON
-                import json as json_lib
-                body = request.body if hasattr(request, 'body') else request.data
-                if isinstance(body, bytes):
-                    body = body.decode('utf-8')
-                update_data = json_lib.loads(body)
+            logger.info("📥 Received POST request")
+
+            # Validate config
+            if not config.TELEGRAM_BOT_TOKEN:
+                logger.error("❌ TELEGRAM_BOT_TOKEN not set!")
+                self.send_response(500)
+                self.end_headers()
+                return
+
+            # Initialize application
+            logger.info("🔧 Initializing Telegram Application...")
+            application = Application.builder().token(config.TELEGRAM_BOT_TOKEN).build()
+
+            # Register handlers
+            logger.info("📝 Registering handlers...")
+
+            # Basic commands
+            application.add_handler(CommandHandler("start", start_command))
+            application.add_handler(CommandHandler(config.COMMAND_HELP, help_command))
+
+            # Summary command
+            application.add_handler(CommandHandler(config.COMMAND_SUMMARY, summary_command))
+            application.add_handler(CallbackQueryHandler(summary_callback, pattern="^summary:"))
+
+            # Judge command
+            application.add_handler(CommandHandler(config.COMMAND_JUDGE, judge_command))
+
+            # Personality command with conversation
+            personality_conv = ConversationHandler(
+                entry_points=[
+                    CommandHandler(config.COMMAND_PERSONALITY, personality_command),
+                    CallbackQueryHandler(personality_callback, pattern="^pers:")
+                ],
+                states={
+                    AWAITING_NAME: [
+                        MessageHandler(filters.TEXT & ~filters.COMMAND, receive_personality_name)
+                    ],
+                    AWAITING_DESCRIPTION: [
+                        MessageHandler(filters.TEXT & ~filters.COMMAND, receive_personality_description)
+                    ]
+                },
+                fallbacks=[CommandHandler("cancel", cancel_personality_creation)],
+                name="personality_conversation",
+                persistent=False
+            )
+            application.add_handler(personality_conv)
+
+            # Log messages to database
+            application.add_handler(MessageHandler(
+                filters.TEXT & ~filters.COMMAND,
+                log_message_to_db
+            ))
+
+            # Handle bot being added/removed
+            application.add_handler(MessageHandler(
+                filters.StatusUpdate.NEW_CHAT_MEMBERS,
+                handle_bot_added_to_chat
+            ))
+            application.add_handler(MessageHandler(
+                filters.StatusUpdate.LEFT_CHAT_MEMBER,
+                handle_bot_removed_from_chat
+            ))
+
+            # Initialize the application
+            logger.info("⚡ Initializing application...")
+            await application.initialize()
+
+            try:
+                # Read and parse request body
+                content_len = int(self.headers.get('Content-Length', 0))
+                post_body = self.rfile.read(content_len)
+                update_data = json.loads(post_body.decode('utf-8'))
+
+                logger.info(f"📨 Processing update: {update_data.get('update_id', 'unknown')}")
+
+                # Create Update object and process it
+                update = Update.de_json(update_data, application.bot)
+                await application.process_update(update)
+
+                logger.info("✅ Update processed successfully")
+
+                # Send success response
+                self.send_response(200)
+                self.send_header('Content-type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({'ok': True}).encode())
+
+            except Exception as e:
+                logger.error(f"❌ Error processing update: {e}", exc_info=True)
+                self.send_response(500)
+                self.send_header('Content-type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({'error': str(e)}).encode())
+
+            finally:
+                # Shutdown application
+                logger.info("🔚 Shutting down application...")
+                await application.shutdown()
+
         except Exception as e:
-            logger.error(f"Error parsing request body: {e}", exc_info=True)
-            return {
-                'statusCode': 400,
-                'body': json.dumps({'error': 'Invalid JSON'})
+            logger.error(f"💥 CRITICAL ERROR in handler: {e}", exc_info=True)
+            print(f"CRITICAL ERROR in handler: {e}", file=sys.stderr)
+            traceback.print_exc()
+
+            try:
+                self.send_response(500)
+                self.send_header('Content-type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({'error': f'Internal error: {str(e)}'}).encode())
+            except:
+                pass
+
+    def do_POST(self):
+        """Handle POST request (entry point)"""
+        try:
+            # Run async handler
+            asyncio.run(self.do_POST_async())
+        except Exception as e:
+            logger.error(f"💥 Error in do_POST: {e}", exc_info=True)
+            print(f"Error in do_POST: {e}", file=sys.stderr)
+            traceback.print_exc()
+
+    def do_GET(self):
+        """Handle GET request (health check)"""
+        try:
+            logger.info("🏥 Health check requested")
+
+            health_data = {
+                'status': 'ok',
+                'bot': config.BOT_USERNAME,
+                'config': {
+                    'telegram_configured': bool(config.TELEGRAM_BOT_TOKEN),
+                    'anthropic_configured': bool(config.ANTHROPIC_API_KEY),
+                    'supabase_configured': bool(config.SUPABASE_URL and config.SUPABASE_KEY),
+                }
             }
 
-        logger.info(f"Received update: {update_data.get('update_id', 'unknown')}")
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps(health_data).encode())
 
-        # Process update asynchronously
-        import asyncio
-        try:
-            asyncio.run(process_update(update_data))
         except Exception as e:
-            logger.error(f"Error in asyncio.run: {e}", exc_info=True)
-            raise
-
-        logger.info("Update processed successfully")
-        return {
-            'statusCode': 200,
-            'body': json.dumps({'ok': True})
-        }
-
-    except Exception as e:
-        logger.error(f"Error in webhook handler: {e}", exc_info=True)
-        return {
-            'statusCode': 500,
-            'body': json.dumps({'error': str(e)})
-        }
+            logger.error(f"❌ Error in health check: {e}", exc_info=True)
+            self.send_response(500)
+            self.end_headers()
 
 
-# Export handler for Vercel
-# Vercel Python runtime expects a callable named 'handler' or 'app'
-def app(environ, start_response):
-    """WSGI app for Vercel"""
-    try:
-        # Import request wrapper
-        from werkzeug.wrappers import Request, Response
-
-        logger.info("WSGI app called")
-        logger.debug(f"Environment: {environ.get('REQUEST_METHOD', 'unknown')} {environ.get('PATH_INFO', '/')}")
-
-        request = Request(environ)
-        result = handler(request)
-
-        response = Response(
-            result.get('body', '{}'),
-            status=result.get('statusCode', 200),
-            content_type='application/json'
-        )
-        return response(environ, start_response)
-
-    except Exception as e:
-        logger.error(f"CRITICAL ERROR in WSGI app: {e}", exc_info=True)
-        print(f"CRITICAL ERROR in WSGI app: {e}", file=sys.stderr)
-        traceback.print_exc()
-
-        # Return error response
-        from werkzeug.wrappers import Response
-        response = Response(
-            json.dumps({'error': f'Internal server error: {str(e)}'}),
-            status=500,
-            content_type='application/json'
-        )
-        return response(environ, start_response)
-
-
-# For testing locally with Flask
+# For local testing
 if __name__ == '__main__':
     from flask import Flask, request as flask_request
 
@@ -360,11 +321,22 @@ if __name__ == '__main__':
 
     @flask_app.route('/', methods=['POST'])
     def webhook():
-        return handler(flask_request)
+        class FakeRequest:
+            def __init__(self, flask_req):
+                self.headers = flask_req.headers
+                self.rfile = flask_req.stream
+
+        fake_req = FakeRequest(flask_request)
+        h = handler(fake_req, ('127.0.0.1', 0), None)
+        h.do_POST()
+        return {'ok': True}
 
     @flask_app.route('/health', methods=['GET'])
     def health():
-        return {'status': 'ok', 'bot': 'chto_bilo_v_chate_bot'}
+        return {
+            'status': 'ok',
+            'bot': config.BOT_USERNAME
+        }
 
-    logger.info("Starting local test server...")
+    logger.info("🚀 Starting local test server...")
     flask_app.run(host='0.0.0.0', port=8000, debug=True)

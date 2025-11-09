@@ -26,6 +26,5 @@ aiohttp==3.10.10
 python-dateutil==2.9.0
 
 # For Vercel Serverless Functions
-# (Vercel automatically provides these, but good to specify)
+# (Vercel automatically provides Flask, but good to specify for local testing)
 flask==3.0.3
-werkzeug==3.0.3

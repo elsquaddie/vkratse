@@ -13,6 +13,7 @@ load_dotenv()
 # TELEGRAM CONFIGURATION
 # ================================================
 TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
+BOT_USERNAME = os.getenv('BOT_USERNAME', 'chto_bilo_v_chate_bot')
 
 # ================================================
 # AI CONFIGURATION (Anthropic Claude)

@@ -94,10 +94,23 @@ def validate_config():
 # Validate on import
 try:
     validate_config()
+    print("✅ Configuration validated successfully")
 except ValueError as e:
-    # In development, just warn. In production, this should fail hard.
-    print(f"⚠️  WARNING: Configuration validation failed:\n{e}")
-    print("Please set required environment variables in .env file")
+    # In production (Vercel), this is critical
+    import sys
+    print(f"❌ CRITICAL: Configuration validation failed!", file=sys.stderr)
+    print(f"Missing environment variables:\n{e}", file=sys.stderr)
+    print("\nPlease set these variables in Vercel dashboard:", file=sys.stderr)
+    print("  vercel env add TELEGRAM_BOT_TOKEN", file=sys.stderr)
+    print("  vercel env add ANTHROPIC_API_KEY", file=sys.stderr)
+    print("  vercel env add SUPABASE_URL", file=sys.stderr)
+    print("  vercel env add SUPABASE_KEY", file=sys.stderr)
+
+    # Also print to stdout for Vercel logs
+    print(f"❌ Configuration error: {e}")
+
+    # Don't raise in production - let it be handled gracefully
+    # The get_application() function will catch this
 
 # ================================================
 # LOGGING CONFIGURATION

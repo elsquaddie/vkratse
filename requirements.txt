@@ -1,0 +1,30 @@
+# ================================================
+# Python Dependencies
+# Project: Что было в чате (@chto_bilo_v_chate_bot)
+# ================================================
+
+# Telegram Bot Framework
+python-telegram-bot==21.0.1
+python-telegram-bot[webhooks]==21.0.1
+
+# AI (Anthropic Claude)
+anthropic==0.39.0
+
+# Database (Supabase)
+supabase==2.9.0
+
+# Environment Variables
+python-dotenv==1.0.1
+
+# HTTP Client (used by Supabase)
+httpx==0.27.2
+
+# Async Support
+aiohttp==3.10.10
+
+# Utilities
+python-dateutil==2.9.0
+
+# For Vercel Serverless Functions
+# (Vercel automatically provides these, but good to specify)
+flask==3.0.3

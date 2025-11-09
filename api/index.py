@@ -16,21 +16,42 @@ from telegram.constants import ChatType
 import json
 import config
 from config import logger
-from services import DBService
 
-# Import command handlers
-from modules.commands import start_command, help_command
-from modules.summaries import summary_command, summary_callback
-from modules.judge import judge_command
-from modules.personalities import (
-    personality_command,
-    personality_callback,
-    receive_personality_name,
-    receive_personality_description,
-    cancel_personality_creation,
-    AWAITING_NAME,
-    AWAITING_DESCRIPTION
-)
+# Lazy imports - will be imported only when needed at runtime
+# This prevents import errors during build when env vars aren't available
+def get_services():
+    """Lazy import services"""
+    from services import DBService
+    return DBService
+
+def get_command_handlers():
+    """Lazy import command handlers"""
+    from modules.commands import start_command, help_command
+    from modules.summaries import summary_command, summary_callback
+    from modules.judge import judge_command
+    from modules.personalities import (
+        personality_command,
+        personality_callback,
+        receive_personality_name,
+        receive_personality_description,
+        cancel_personality_creation,
+        AWAITING_NAME,
+        AWAITING_DESCRIPTION
+    )
+    return {
+        'start_command': start_command,
+        'help_command': help_command,
+        'summary_command': summary_command,
+        'summary_callback': summary_callback,
+        'judge_command': judge_command,
+        'personality_command': personality_command,
+        'personality_callback': personality_callback,
+        'receive_personality_name': receive_personality_name,
+        'receive_personality_description': receive_personality_description,
+        'cancel_personality_creation': cancel_personality_creation,
+        'AWAITING_NAME': AWAITING_NAME,
+        'AWAITING_DESCRIPTION': AWAITING_DESCRIPTION
+    }
 
 
 # Initialize bot application (lazy initialization)
@@ -50,36 +71,39 @@ def setup_handlers():
     """Setup all command and message handlers"""
     global application
 
+    # Lazy import handlers
+    handlers = get_command_handlers()
+
     # Basic commands
-    application.add_handler(CommandHandler("start", start_command))
-    application.add_handler(CommandHandler(config.COMMAND_HELP, help_command))
+    application.add_handler(CommandHandler("start", handlers['start_command']))
+    application.add_handler(CommandHandler(config.COMMAND_HELP, handlers['help_command']))
 
     # Summary command
-    application.add_handler(CommandHandler(config.COMMAND_SUMMARY, summary_command))
+    application.add_handler(CommandHandler(config.COMMAND_SUMMARY, handlers['summary_command']))
     application.add_handler(CallbackQueryHandler(
-        summary_callback,
+        handlers['summary_callback'],
         pattern="^summary:"
     ))
 
     # Judge command
-    application.add_handler(CommandHandler(config.COMMAND_JUDGE, judge_command))
+    application.add_handler(CommandHandler(config.COMMAND_JUDGE, handlers['judge_command']))
 
     # Personality command with conversation for creating custom ones
     personality_conv = ConversationHandler(
         entry_points=[
-            CommandHandler(config.COMMAND_PERSONALITY, personality_command),
-            CallbackQueryHandler(personality_callback, pattern="^pers:")
+            CommandHandler(config.COMMAND_PERSONALITY, handlers['personality_command']),
+            CallbackQueryHandler(handlers['personality_callback'], pattern="^pers:")
         ],
         states={
-            AWAITING_NAME: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, receive_personality_name)
+            handlers['AWAITING_NAME']: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handlers['receive_personality_name'])
             ],
-            AWAITING_DESCRIPTION: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, receive_personality_description)
+            handlers['AWAITING_DESCRIPTION']: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handlers['receive_personality_description'])
             ]
         },
         fallbacks=[
-            CommandHandler("cancel", cancel_personality_creation)
+            CommandHandler("cancel", handlers['cancel_personality_creation'])
         ],
         name="personality_conversation",
         persistent=False
@@ -116,6 +140,7 @@ async def log_message_to_db(update: Update, context) -> None:
 
     # Only log messages from groups
     if chat.type in [ChatType.GROUP, ChatType.SUPERGROUP]:
+        DBService = get_services()
         db = DBService()
 
         # Save message
@@ -147,6 +172,7 @@ async def handle_bot_added_to_chat(update: Update, context) -> None:
             logger.info(f"Bot added to chat {chat.id} ({chat.title})")
 
             # Save chat metadata
+            DBService = get_services()
             db = DBService()
             db.save_chat_metadata(
                 chat_id=chat.id,
@@ -179,6 +205,7 @@ async def handle_bot_removed_from_chat(update: Update, context) -> None:
         logger.info(f"Bot removed from chat {chat.id} ({chat.title})")
 
         # Delete all data for this chat
+        DBService = get_services()
         db = DBService()
         db.delete_messages_by_chat(chat.id)
         db.delete_chat_metadata(chat.id)

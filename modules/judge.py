@@ -30,17 +30,12 @@ async def judge_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
     logger.info(f"Judge command from user {user.id} in chat {chat.id}")
 
-    # 1. Check if dispute text is provided
-    if not context.args:
-        await update.message.reply_text(
-            f"❌ Формат: /{config.COMMAND_JUDGE} <описание спора>\n\n"
-            f"Примеры:\n"
-            f"/{config.COMMAND_JUDGE} @вася говорит Python лучше, @петя говорит JS лучше\n"
-            f"/{config.COMMAND_JUDGE} Кто прав насчёт вопроса X?"
-        )
-        return
-
-    dispute_text = " ".join(context.args)
+    # 1. Get dispute text or use auto-analysis
+    if context.args:
+        dispute_text = " ".join(context.args)
+    else:
+        # No explicit dispute - analyze chat context automatically
+        dispute_text = None
 
     # 2. Rate limit check
     ok, remaining = check_rate_limit(user.id)
@@ -58,8 +53,8 @@ async def judge_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         )
         return
 
-    # 4. Extract mentioned users
-    mentioned_usernames = extract_mentions(dispute_text)
+    # 4. Extract mentioned users (if dispute_text provided)
+    mentioned_usernames = extract_mentions(dispute_text) if dispute_text else []
 
     # 5. Get relevant messages
     messages = []
@@ -72,12 +67,12 @@ async def judge_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         )
         logger.debug(f"Found {len(messages)} messages from mentioned users")
     else:
-        # No mentions - get recent messages from chat
+        # No mentions - get more recent messages for context analysis
         messages = db.get_messages(
             chat_id=chat.id,
-            limit=20
+            limit=50  # Увеличил до 50 для лучшего контекста
         )
-        logger.debug(f"No mentions, using {len(messages)} recent messages")
+        logger.debug(f"Using {len(messages)} recent messages for analysis")
 
     # 6. Get user's personality
     personality_name = db.get_user_personality(user.id)

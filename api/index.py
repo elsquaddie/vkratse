@@ -33,12 +33,22 @@ from modules.personalities import (
 )
 
 
-# Initialize bot application
-application = Application.builder().token(config.TELEGRAM_BOT_TOKEN).build()
+# Initialize bot application (lazy initialization)
+application = None
+
+
+def get_application():
+    """Get or create the Application instance"""
+    global application
+    if application is None:
+        application = Application.builder().token(config.TELEGRAM_BOT_TOKEN).build()
+        setup_handlers()
+    return application
 
 
 def setup_handlers():
     """Setup all command and message handlers"""
+    global application
 
     # Basic commands
     application.add_handler(CommandHandler("start", start_command))
@@ -176,10 +186,6 @@ async def handle_bot_removed_from_chat(update: Update, context) -> None:
         logger.info(f"Deleted all data for chat {chat.id}")
 
 
-# Setup handlers on import
-setup_handlers()
-
-
 # ================================================
 # VERCEL SERVERLESS FUNCTION HANDLER
 # ================================================
@@ -187,8 +193,9 @@ setup_handlers()
 async def process_update(update_data: dict):
     """Process a single update from Telegram"""
     try:
-        update = Update.de_json(update_data, application.bot)
-        await application.process_update(update)
+        app = get_application()
+        update = Update.de_json(update_data, app.bot)
+        await app.process_update(update)
     except Exception as e:
         logger.error(f"Error processing update: {e}", exc_info=True)
 

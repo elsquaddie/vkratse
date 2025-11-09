@@ -91,13 +91,15 @@ def validate_config():
     if errors:
         raise ValueError("\n".join(errors))
 
-# Validate on import
+# Validate on import - but don't fail hard on Vercel
+# (env vars might not be available during build, only at runtime)
 try:
     validate_config()
+    print("✅ Configuration validated successfully")
 except ValueError as e:
-    # In development, just warn. In production, this should fail hard.
+    # In development, just warn. In production (Vercel), env vars are available at runtime.
     print(f"⚠️  WARNING: Configuration validation failed:\n{e}")
-    print("Please set required environment variables in .env file")
+    print("This is OK during build - env vars will be available at runtime on Vercel")
 
 # ================================================
 # LOGGING CONFIGURATION

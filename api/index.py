@@ -1,6 +1,6 @@
 """
-DIAGNOSTIC VERSION - Step 2: Pure WSGI (NO Werkzeug)
-Проверяем работу без внешних зависимостей
+DIAGNOSTIC VERSION - Step 3: Adding project imports
+Постепенно добавляем импорты проектных модулей
 """
 
 import sys
@@ -19,54 +19,100 @@ def log(message):
 # ================================================
 log("✅ CHECKPOINT 1: Module api/index.py loaded successfully")
 
+# ================================================
+# CHECKPOINT 2: Import telegram
+# ================================================
+try:
+    from telegram import Update
+    from telegram.ext import Application
+    log("✅ CHECKPOINT 2: telegram imports successful")
+except Exception as e:
+    log(f"❌ CHECKPOINT 2 FAILED: telegram import error: {e}")
 
 # ================================================
-# Pure WSGI Application (NO external dependencies)
+# CHECKPOINT 3: Import config
+# ================================================
+try:
+    import config
+    from config import logger
+    log("✅ CHECKPOINT 3: config import successful")
+except Exception as e:
+    log(f"❌ CHECKPOINT 3 FAILED: config import error: {e}")
+
+# ================================================
+# CHECKPOINT 4: Import services
+# ================================================
+try:
+    from services import DBService
+    log("✅ CHECKPOINT 4: services import successful")
+except Exception as e:
+    log(f"❌ CHECKPOINT 4 FAILED: services import error: {e}")
+
+# ================================================
+# CHECKPOINT 5: Import modules
+# ================================================
+try:
+    from modules.commands import start_command, help_command
+    from modules.summaries import summary_command, summary_callback
+    from modules.judge import judge_command
+    from modules.personalities import (
+        personality_command,
+        personality_callback,
+        receive_personality_name,
+        receive_personality_description,
+        cancel_personality_creation,
+        AWAITING_NAME,
+        AWAITING_DESCRIPTION
+    )
+    log("✅ CHECKPOINT 5: modules import successful")
+except Exception as e:
+    log(f"❌ CHECKPOINT 5 FAILED: modules import error: {e}")
+
+log("✅ CHECKPOINT 6: All imports completed")
+
+
+# ================================================
+# Pure WSGI Application
 # ================================================
 def application(environ, start_response):
     """
     Pure WSGI application - Vercel Python runtime calls this
-
-    This is the absolute minimum WSGI app possible:
-    - No Werkzeug
-    - No Flask
-    - Just pure WSGI spec
     """
     try:
-        log("✅ CHECKPOINT 2: WSGI application() called")
+        log("✅ CHECKPOINT 7: WSGI application() called")
 
         # Get request info from WSGI environ
         method = environ.get('REQUEST_METHOD', 'UNKNOWN')
         path = environ.get('PATH_INFO', 'UNKNOWN')
 
-        log(f"✅ CHECKPOINT 3: Request = {method} {path}")
+        log(f"✅ CHECKPOINT 8: Request = {method} {path}")
 
         # Prepare response
         status = '200 OK'
         headers = [
             ('Content-Type', 'application/json'),
-            ('X-Checkpoint', '4')
+            ('X-Checkpoint', '9')
         ]
 
-        log("✅ CHECKPOINT 4: Preparing response")
+        log("✅ CHECKPOINT 9: Preparing response")
 
         # Start response
         start_response(status, headers)
 
-        log("✅ CHECKPOINT 5: start_response() called")
+        log("✅ CHECKPOINT 10: start_response() called")
 
         # Response body (must be bytes)
         response_data = {
             'status': 'ok',
-            'checkpoint': 5,
-            'message': 'Pure WSGI working!',
+            'checkpoint': 10,
+            'message': 'WSGI with imports working!',
             'method': method,
             'path': path
         }
 
         response_body = json.dumps(response_data).encode('utf-8')
 
-        log("✅ CHECKPOINT 6: Response ready, returning")
+        log("✅ CHECKPOINT 11: Response ready, returning")
 
         # WSGI spec: return iterable of bytes
         return [response_body]
@@ -90,11 +136,11 @@ def application(environ, start_response):
 # Vercel looks for 'app' or 'application' in WSGI mode
 app = application
 
-log("✅ CHECKPOINT 7: Module fully loaded, 'app' and 'application' defined")
+log("✅ CHECKPOINT 12: Module fully loaded, 'app' and 'application' defined")
 
 
 # ================================================
-# Local testing with minimal Flask
+# Local testing
 # ================================================
 if __name__ == '__main__':
     log("🧪 Running in local test mode")

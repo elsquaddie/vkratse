@@ -3,7 +3,7 @@ AI Service
 Wrapper around Anthropic Claude API
 """
 
-from typing import List
+from typing import List, Optional
 import anthropic
 import config
 from config import logger
@@ -60,6 +60,8 @@ class AIService:
 3. Укажи настроение беседы (если уместно)
 4. Отвечай в стиле своей личности
 5. Саммари должен быть коротким (3-5 предложений обычно)
+6. НЕ ИСПОЛЬЗУЙ markdown форматирование (**, *, #, ###)! Используй только простой текст и эмодзи
+7. Для выделения используй ЗАГЛАВНЫЕ БУКВЫ или эмодзи, но НЕ звездочки
 
 Твой саммари:
 """
@@ -84,7 +86,7 @@ class AIService:
 
     def generate_judge_verdict(
         self,
-        dispute_text: str,
+        dispute_text: Optional[str],
         messages: List[Message],
         personality: Personality
     ) -> str:
@@ -92,7 +94,7 @@ class AIService:
         Generate a verdict for a dispute
 
         Args:
-            dispute_text: Description of the dispute
+            dispute_text: Description of the dispute (None for auto-analysis)
             messages: Context messages from the chat
             personality: AI personality to use
 
@@ -101,7 +103,9 @@ class AIService:
         """
         formatted_messages = self._format_messages(messages) if messages else "Нет контекста"
 
-        prompt = f"""
+        if dispute_text:
+            # Explicit dispute provided
+            prompt = f"""
 {personality.system_prompt}
 
 Твоя задача: рассудить спор.
@@ -117,6 +121,26 @@ class AIService:
 3. Дай своё заключение
 4. Отвечай в стиле своей личности
 5. Будь справедливым, но можешь добавить юмор
+6. НЕ ИСПОЛЬЗУЙ markdown форматирование (**, *, #)! Используй только простой текст и эмодзи
+
+Твой вердикт:
+"""
+        else:
+            # Auto-analyze conversation context
+            prompt = f"""
+{personality.system_prompt}
+
+Твоя задача: проанализировать последние сообщения в чате и дать свой комментарий или рассудить, если есть спор/дискуссия.
+
+Последние сообщения из чата:
+{formatted_messages}
+
+Требования к вердикту:
+1. Если видишь спор/дискуссию - рассуди кто прав
+2. Если спора нет - дай краткий комментарий о том, что обсуждается
+3. Отвечай в стиле своей личности
+4. Будь справедливым, но можешь добавить юмор
+5. НЕ ИСПОЛЬЗУЙ markdown форматирование (**, *, #)! Используй только простой текст и эмодзи
 
 Твой вердикт:
 """

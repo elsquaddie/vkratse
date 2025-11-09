@@ -15,7 +15,7 @@ class Message:
     id: int
     chat_id: int
     user_id: Optional[int]
-    username: Optional[str]
+    username: Optional[str]  # Actually stores display name (first_name), not @username
     message_text: Optional[str]
     created_at: datetime
 

@@ -1,151 +1,174 @@
 """
-Telegram Bot Webhook Handler
+Telegram Bot Webhook Handler - FIXED VERSION
 Entry point for Vercel serverless function
+
+FIX: Removed Werkzeug dependency, using pure WSGI
+FIX: Graceful degradation - no raise in imports
 """
 
-from telegram import Update
-from telegram.ext import (
-    Application,
-    CommandHandler,
-    MessageHandler,
-    CallbackQueryHandler,
-    ConversationHandler,
-    filters
-)
-from telegram.constants import ChatType
+import sys
 import json
-import config
-from config import logger
-from services import DBService
-
-# Import command handlers
-from modules.commands import start_command, help_command
-from modules.summaries import summary_command, summary_callback
-from modules.judge import judge_command
-from modules.personalities import (
-    personality_command,
-    personality_callback,
-    receive_personality_name,
-    receive_personality_description,
-    cancel_personality_creation,
-    AWAITING_NAME,
-    AWAITING_DESCRIPTION
-)
+import asyncio
+from datetime import datetime
 
 
-# Initialize bot application
-application = Application.builder().token(config.TELEGRAM_BOT_TOKEN).build()
+def log(message):
+    """Print log with timestamp to stderr"""
+    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    print(f"[{timestamp}] {message}", file=sys.stderr, flush=True)
 
 
-def setup_handlers():
-    """Setup all command and message handlers"""
+# ================================================
+# CHECKPOINT 1: Module loaded
+# ================================================
+log("✅ CHECKPOINT 1: Module api/index.py loaded successfully")
 
-    # Basic commands
-    application.add_handler(CommandHandler("start", start_command))
-    application.add_handler(CommandHandler(config.COMMAND_HELP, help_command))
+# Import success flags
+telegram_imported = False
+config_imported = False
+services_imported = False
+modules_imported = False
+bot_initialized = False
 
-    # Summary command
-    application.add_handler(CommandHandler(config.COMMAND_SUMMARY, summary_command))
-    application.add_handler(CallbackQueryHandler(
-        summary_callback,
-        pattern="^summary:"
-    ))
-
-    # Judge command
-    application.add_handler(CommandHandler(config.COMMAND_JUDGE, judge_command))
-
-    # Personality command with conversation for creating custom ones
-    personality_conv = ConversationHandler(
-        entry_points=[
-            CommandHandler(config.COMMAND_PERSONALITY, personality_command),
-            CallbackQueryHandler(personality_callback, pattern="^pers:")
-        ],
-        states={
-            AWAITING_NAME: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, receive_personality_name)
-            ],
-            AWAITING_DESCRIPTION: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, receive_personality_description)
-            ]
-        },
-        fallbacks=[
-            CommandHandler("cancel", cancel_personality_creation)
-        ],
-        name="personality_conversation",
-        persistent=False
+# ================================================
+# CHECKPOINT 2: Import telegram
+# ================================================
+try:
+    from telegram import Update
+    from telegram.ext import (
+        Application,
+        CommandHandler,
+        MessageHandler,
+        CallbackQueryHandler,
+        ConversationHandler,
+        filters
     )
-    application.add_handler(personality_conv)
+    from telegram.constants import ChatType
+    telegram_imported = True
+    log("✅ CHECKPOINT 2: telegram imports successful")
+except Exception as e:
+    log(f"❌ CHECKPOINT 2 FAILED: telegram import error: {e}")
 
-    # Log all messages to database
-    application.add_handler(MessageHandler(
-        filters.TEXT & ~filters.COMMAND,
-        log_message_to_db
-    ))
+# ================================================
+# CHECKPOINT 3: Import config
+# ================================================
+try:
+    import config
+    from config import logger
+    config_imported = True
+    log("✅ CHECKPOINT 3: config import successful")
+except Exception as e:
+    log(f"❌ CHECKPOINT 3 FAILED: config import error: {e}")
+    # Create dummy logger for diagnostics
+    import logging
+    logger = logging.getLogger(__name__)
 
-    # Handle bot being added/removed from chats
-    application.add_handler(MessageHandler(
-        filters.StatusUpdate.NEW_CHAT_MEMBERS,
-        handle_bot_added_to_chat
-    ))
-    application.add_handler(MessageHandler(
-        filters.StatusUpdate.LEFT_CHAT_MEMBER,
-        handle_bot_removed_from_chat
-    ))
+# ================================================
+# CHECKPOINT 4: Import services
+# ================================================
+try:
+    from services import DBService
+    services_imported = True
+    log("✅ CHECKPOINT 4: services import successful")
+except Exception as e:
+    log(f"❌ CHECKPOINT 4 FAILED: services import error: {e}")
 
-    logger.info("All handlers registered")
+# ================================================
+# CHECKPOINT 5: Import modules
+# ================================================
+try:
+    from modules.commands import start_command, help_command
+    from modules.summaries import summary_command, summary_callback
+    from modules.judge import judge_command
+    from modules.personalities import (
+        personality_command,
+        personality_callback,
+        receive_personality_name,
+        receive_personality_description,
+        cancel_personality_creation,
+        AWAITING_NAME,
+        AWAITING_DESCRIPTION
+    )
+    modules_imported = True
+    log("✅ CHECKPOINT 5: modules import successful")
+except Exception as e:
+    log(f"❌ CHECKPOINT 5 FAILED: modules import error: {e}")
+
+log("✅ CHECKPOINT 6: All imports completed")
+
+# Global bot application (will be set if initialization succeeds)
+bot_application = None
+
+# ================================================
+# CHECKPOINT 7: Initialize bot application
+# ================================================
+if telegram_imported and config_imported:
+    try:
+        bot_application = Application.builder().token(config.TELEGRAM_BOT_TOKEN).build()
+        bot_initialized = True
+        log("✅ CHECKPOINT 7: Bot application initialized")
+    except Exception as e:
+        log(f"❌ CHECKPOINT 7 FAILED: Bot initialization error: {e}")
+        bot_initialized = False
+else:
+    log("⚠️ CHECKPOINT 7 SKIPPED: Required imports missing")
 
 
-async def log_message_to_db(update: Update, context) -> None:
-    """Log all text messages to database"""
-    if not update.message or not update.message.text:
-        return
+# ================================================
+# Message handlers (only if bot initialized)
+# ================================================
+if bot_initialized:
+    async def log_message_to_db(update: Update, context) -> None:
+        """Log all text messages to database"""
+        if not update.message or not update.message.text:
+            return
 
-    message = update.message
-    chat = message.chat
-    user = message.from_user
+        message = update.message
+        chat = message.chat
+        user = message.from_user
 
-    # Only log messages from groups
-    if chat.type in [ChatType.GROUP, ChatType.SUPERGROUP]:
-        db = DBService()
-
-        # Save message
-        db.save_message(
-            chat_id=chat.id,
-            user_id=user.id if user else None,
-            username=user.username if user else None,
-            message_text=message.text
-        )
-
-        # Update chat metadata
-        db.save_chat_metadata(
-            chat_id=chat.id,
-            chat_title=chat.title,
-            chat_type=chat.type
-        )
-
-        logger.debug(f"Logged message from {user.username if user else 'unknown'} in chat {chat.id}")
-
-
-async def handle_bot_added_to_chat(update: Update, context) -> None:
-    """Handle bot being added to a chat"""
-    message = update.message
-    chat = message.chat
-
-    # Check if bot was added
-    for member in message.new_chat_members:
-        if member.id == context.bot.id:
-            logger.info(f"Bot added to chat {chat.id} ({chat.title})")
-
-            # Save chat metadata
+        # Only log messages from groups
+        if chat.type in [ChatType.GROUP, ChatType.SUPERGROUP]:
             db = DBService()
+
+            # Save message
+            db.save_message(
+                chat_id=chat.id,
+                user_id=user.id if user else None,
+                username=user.username if user else None,
+                message_text=message.text
+            )
+
+            # Update chat metadata
             db.save_chat_metadata(
                 chat_id=chat.id,
                 chat_title=chat.title,
                 chat_type=chat.type
             )
 
-            # Send welcome message
-            welcome_text = f"""👋 Привет! Я добавлен в чат.
+            logger.debug(f"Logged message from {user.username if user else 'unknown'} in chat {chat.id}")
+
+
+    async def handle_bot_added_to_chat(update: Update, context) -> None:
+        """Handle bot being added to a chat"""
+        message = update.message
+        chat = message.chat
+
+        # Check if bot was added
+        for member in message.new_chat_members:
+            if member.id == context.bot.id:
+                logger.info(f"Bot added to chat {chat.id} ({chat.title})")
+
+                # Save chat metadata
+                db = DBService()
+                db.save_chat_metadata(
+                    chat_id=chat.id,
+                    chat_title=chat.title,
+                    chat_type=chat.type
+                )
+
+                # Send welcome message
+                welcome_text = f"""👋 Привет! Я добавлен в чат.
 
 🎯 Что умею:
 • /{config.COMMAND_SUMMARY} — саммари чата
@@ -154,124 +177,230 @@ async def handle_bot_added_to_chat(update: Update, context) -> None:
 
 /{config.COMMAND_HELP} — полная справка"""
 
-            await message.reply_text(welcome_text)
-            break
+                await message.reply_text(welcome_text)
+                break
 
 
-async def handle_bot_removed_from_chat(update: Update, context) -> None:
-    """Handle bot being removed from a chat"""
-    message = update.message
-    chat = message.chat
-    left_member = message.left_chat_member
+    async def handle_bot_removed_from_chat(update: Update, context) -> None:
+        """Handle bot being removed from a chat"""
+        message = update.message
+        chat = message.chat
+        left_member = message.left_chat_member
 
-    # Check if bot was removed
-    if left_member and left_member.id == context.bot.id:
-        logger.info(f"Bot removed from chat {chat.id} ({chat.title})")
+        # Check if bot was removed
+        if left_member and left_member.id == context.bot.id:
+            logger.info(f"Bot removed from chat {chat.id} ({chat.title})")
 
-        # Delete all data for this chat
-        db = DBService()
-        db.delete_messages_by_chat(chat.id)
-        db.delete_chat_metadata(chat.id)
+            # Delete all data for this chat
+            db = DBService()
+            db.delete_messages_by_chat(chat.id)
+            db.delete_chat_metadata(chat.id)
 
-        logger.info(f"Deleted all data for chat {chat.id}")
-
-
-# Setup handlers on import
-setup_handlers()
+            logger.info(f"Deleted all data for chat {chat.id}")
 
 
 # ================================================
-# VERCEL SERVERLESS FUNCTION HANDLER
+# CHECKPOINT 8: Setup handlers
 # ================================================
+if bot_initialized and modules_imported:
+    try:
+        # Basic commands
+        bot_application.add_handler(CommandHandler("start", start_command))
+        bot_application.add_handler(CommandHandler(config.COMMAND_HELP, help_command))
 
+        # Summary command
+        bot_application.add_handler(CommandHandler(config.COMMAND_SUMMARY, summary_command))
+        bot_application.add_handler(CallbackQueryHandler(
+            summary_callback,
+            pattern="^summary:"
+        ))
+
+        # Judge command
+        bot_application.add_handler(CommandHandler(config.COMMAND_JUDGE, judge_command))
+
+        # Personality command with conversation for creating custom ones
+        personality_conv = ConversationHandler(
+            entry_points=[
+                CommandHandler(config.COMMAND_PERSONALITY, personality_command),
+                CallbackQueryHandler(personality_callback, pattern="^pers:")
+            ],
+            states={
+                AWAITING_NAME: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, receive_personality_name)
+                ],
+                AWAITING_DESCRIPTION: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, receive_personality_description)
+                ]
+            },
+            fallbacks=[
+                CommandHandler("cancel", cancel_personality_creation)
+            ],
+            name="personality_conversation",
+            persistent=False
+        )
+        bot_application.add_handler(personality_conv)
+
+        # Log all messages to database
+        bot_application.add_handler(MessageHandler(
+            filters.TEXT & ~filters.COMMAND,
+            log_message_to_db
+        ))
+
+        # Handle bot being added/removed from chats
+        bot_application.add_handler(MessageHandler(
+            filters.StatusUpdate.NEW_CHAT_MEMBERS,
+            handle_bot_added_to_chat
+        ))
+        bot_application.add_handler(MessageHandler(
+            filters.StatusUpdate.LEFT_CHAT_MEMBER,
+            handle_bot_removed_from_chat
+        ))
+
+        logger.info("All handlers registered")
+        log("✅ CHECKPOINT 8: All handlers registered successfully")
+    except Exception as e:
+        log(f"❌ CHECKPOINT 8 FAILED: Handler setup error: {e}")
+else:
+    log("⚠️ CHECKPOINT 8 SKIPPED: Bot not initialized or modules missing")
+
+
+# ================================================
+# CHECKPOINT 9: Webhook processing
+# ================================================
 async def process_update(update_data: dict):
     """Process a single update from Telegram"""
+    if not bot_initialized:
+        log("⚠️ Cannot process update: bot not initialized")
+        return
+
     try:
-        update = Update.de_json(update_data, application.bot)
-        await application.process_update(update)
+        log(f"✅ CHECKPOINT 9: Processing update {update_data.get('update_id', 'unknown')}")
+        update = Update.de_json(update_data, bot_application.bot)
+        await bot_application.process_update(update)
+        log(f"✅ CHECKPOINT 10: Update processed successfully")
     except Exception as e:
         logger.error(f"Error processing update: {e}", exc_info=True)
+        log(f"❌ CHECKPOINT 10 FAILED: Update processing error: {e}")
 
 
-def handler(request):
+# ================================================
+# Pure WSGI Application for Vercel
+# ================================================
+def application(environ, start_response):
     """
-    Vercel serverless function handler
+    Pure WSGI application - Vercel Python runtime calls this
 
-    This is the entry point for webhook requests from Telegram
+    FIX: Using pure WSGI instead of Werkzeug
     """
     try:
-        # Only accept POST requests
-        if request.method != 'POST':
-            return {
-                'statusCode': 405,
-                'body': json.dumps({'error': 'Method not allowed'})
-            }
+        log("✅ CHECKPOINT 11: WSGI application() called")
 
-        # Parse update from request body
-        if hasattr(request, 'get_json'):
-            # Flask request object
-            update_data = request.get_json(force=True)
-        elif hasattr(request, 'json'):
-            # Vercel request object
-            update_data = request.json
+        # Get request info from WSGI environ
+        method = environ.get('REQUEST_METHOD', 'UNKNOWN')
+        path = environ.get('PATH_INFO', 'UNKNOWN')
+
+        log(f"✅ CHECKPOINT 12: Request = {method} {path}")
+
+        # Only accept POST requests for webhook
+        if method != 'POST':
+            log(f"⚠️ Non-POST request: {method} {path}")
+            status = '200 OK'
+            headers = [('Content-Type', 'application/json')]
+            start_response(status, headers)
+
+            response_body = json.dumps({
+                'status': 'ok',
+                'message': 'Bot is running. Use POST for webhook.',
+                'method': method,
+                'path': path,
+                'bot_initialized': bot_initialized
+            }).encode('utf-8')
+
+            return [response_body]
+
+        # Check if bot is initialized
+        if not bot_initialized:
+            log("⚠️ Bot not initialized, cannot process webhook")
+            status = '503 Service Unavailable'
+            headers = [('Content-Type', 'application/json')]
+            start_response(status, headers)
+
+            response_body = json.dumps({
+                'error': 'Bot not initialized',
+                'telegram_imported': telegram_imported,
+                'config_imported': config_imported,
+                'services_imported': services_imported,
+                'modules_imported': modules_imported
+            }).encode('utf-8')
+
+            return [response_body]
+
+        # Read request body
+        try:
+            content_length = int(environ.get('CONTENT_LENGTH', 0))
+        except ValueError:
+            content_length = 0
+
+        if content_length > 0:
+            request_body = environ['wsgi.input'].read(content_length)
+            update_data = json.loads(request_body.decode('utf-8'))
+            log(f"✅ CHECKPOINT 13: Parsed webhook data, update_id={update_data.get('update_id', 'unknown')}")
         else:
-            # Try to parse body as JSON
-            import json as json_lib
-            body = request.body if hasattr(request, 'body') else request.data
-            if isinstance(body, bytes):
-                body = body.decode('utf-8')
-            update_data = json_lib.loads(body)
-
-        logger.info(f"Received update: {update_data.get('update_id', 'unknown')}")
+            log("⚠️ Empty request body")
+            status = '400 Bad Request'
+            headers = [('Content-Type', 'application/json')]
+            start_response(status, headers)
+            return [json.dumps({'error': 'Empty request body'}).encode('utf-8')]
 
         # Process update asynchronously
-        import asyncio
+        log("✅ CHECKPOINT 14: Running async update processing")
         asyncio.run(process_update(update_data))
 
-        return {
-            'statusCode': 200,
-            'body': json.dumps({'ok': True})
-        }
+        log("✅ CHECKPOINT 15: Webhook processed successfully")
+
+        # Return success
+        status = '200 OK'
+        headers = [('Content-Type', 'application/json')]
+        start_response(status, headers)
+
+        response_body = json.dumps({'ok': True}).encode('utf-8')
+        return [response_body]
 
     except Exception as e:
+        log(f"❌ ERROR in WSGI app: {e}")
         logger.error(f"Error in webhook handler: {e}", exc_info=True)
-        return {
-            'statusCode': 500,
-            'body': json.dumps({'error': str(e)})
-        }
+
+        # Error response
+        status = '500 Internal Server Error'
+        headers = [('Content-Type', 'application/json')]
+        start_response(status, headers)
+
+        error_body = json.dumps({
+            'error': str(e),
+            'ok': False
+        }).encode('utf-8')
+
+        return [error_body]
 
 
-# Export handler for Vercel
-# Vercel Python runtime expects a callable named 'handler' or 'app'
-def app(environ, start_response):
-    """WSGI app for Vercel"""
-    # Import request wrapper
-    from werkzeug.wrappers import Request, Response
+# Vercel looks for 'app' or 'application' in WSGI mode
+app = application
 
-    request = Request(environ)
-    result = handler(request)
-
-    response = Response(
-        result.get('body', '{}'),
-        status=result.get('statusCode', 200),
-        content_type='application/json'
-    )
-    return response(environ, start_response)
+log(f"✅ CHECKPOINT 16: Module fully loaded (bot_initialized={bot_initialized})")
 
 
-# For testing locally with Flask
+# ================================================
+# Local testing
+# ================================================
 if __name__ == '__main__':
-    from flask import Flask, request as flask_request
-
-    flask_app = Flask(__name__)
-
-    @flask_app.route('/', methods=['POST'])
-    def webhook():
-        return handler(flask_request)
-
-    @flask_app.route('/health', methods=['GET'])
-    def health():
-        return {'status': 'ok', 'bot': 'chto_bilo_v_chate_bot'}
-
-    logger.info("Starting local test server...")
-    flask_app.run(host='0.0.0.0', port=8000, debug=True)
+    log("🧪 Running in local test mode")
+    print("\n" + "="*60)
+    print("Bot status:")
+    print(f"  telegram_imported: {telegram_imported}")
+    print(f"  config_imported: {config_imported}")
+    print(f"  services_imported: {services_imported}")
+    print(f"  modules_imported: {modules_imported}")
+    print(f"  bot_initialized: {bot_initialized}")
+    if bot_initialized:
+        print(f"  handlers: {len(bot_application.handlers)}")
+    print("="*60 + "\n")

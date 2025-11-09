@@ -33,15 +33,24 @@ class DBService:
         username: Optional[str],
         message_text: Optional[str]
     ) -> None:
-        """Save a message to database"""
+        """Save a message to database and auto-cleanup old messages"""
         try:
+            # 1. Save new message
             self.client.table('messages').insert({
                 'chat_id': chat_id,
                 'user_id': user_id,
                 'username': username,
                 'message_text': message_text
             }).execute()
-            logger.debug(f"Saved message from {username} in chat {chat_id}")
+
+            # 2. Auto-cleanup: delete messages older than MESSAGE_RETENTION_DAYS
+            time_threshold = datetime.now(timezone.utc) - timedelta(days=config.MESSAGE_RETENTION_DAYS)
+            self.client.table('messages').delete()\
+                .eq('chat_id', chat_id)\
+                .lt('created_at', time_threshold.isoformat())\
+                .execute()
+
+            logger.debug(f"Saved message from {username} in chat {chat_id}, cleaned old messages")
         except Exception as e:
             logger.error(f"Error saving message: {e}")
 
@@ -104,15 +113,6 @@ class DBService:
             logger.info(f"Deleted all messages from chat {chat_id}")
         except Exception as e:
             logger.error(f"Error deleting messages: {e}")
-
-    def cleanup_old_messages(self) -> None:
-        """Delete messages older than MESSAGE_RETENTION_DAYS"""
-        try:
-            cutoff = datetime.now(timezone.utc) - timedelta(days=config.MESSAGE_RETENTION_DAYS)
-            self.client.table('messages').delete().lt('created_at', cutoff.isoformat()).execute()
-            logger.info(f"Cleaned up messages older than {config.MESSAGE_RETENTION_DAYS} days")
-        except Exception as e:
-            logger.error(f"Error cleaning up messages: {e}")
 
     # ================================================
     # PERSONALITIES

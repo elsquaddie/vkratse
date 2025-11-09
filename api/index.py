@@ -364,7 +364,24 @@ def application(environ, start_response):
 
         # Process update asynchronously
         log("✅ CHECKPOINT 14: Running async update processing")
-        asyncio.run(process_update(update_data))
+
+        # FIX: Use get_event_loop() or create new one for serverless
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_closed():
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+
+        # Run the update processing and wait for all tasks to complete
+        loop.run_until_complete(process_update(update_data))
+
+        # Give pending tasks a chance to complete (important for telegram API calls)
+        pending = asyncio.all_tasks(loop)
+        if pending:
+            loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
 
         log("✅ CHECKPOINT 15: Webhook processed successfully")
 

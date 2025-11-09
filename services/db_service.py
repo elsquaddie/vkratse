@@ -33,15 +33,24 @@ class DBService:
         username: Optional[str],
         message_text: Optional[str]
     ) -> None:
-        """Save a message to database"""
+        """Save a message to database and auto-cleanup old messages"""
         try:
+            # 1. Save new message
             self.client.table('messages').insert({
                 'chat_id': chat_id,
                 'user_id': user_id,
                 'username': username,
                 'message_text': message_text
             }).execute()
-            logger.debug(f"Saved message from {username} in chat {chat_id}")
+
+            # 2. Auto-cleanup: delete messages older than MESSAGE_RETENTION_DAYS
+            time_threshold = datetime.now(timezone.utc) - timedelta(days=config.MESSAGE_RETENTION_DAYS)
+            self.client.table('messages').delete()\
+                .eq('chat_id', chat_id)\
+                .lt('created_at', time_threshold.isoformat())\
+                .execute()
+
+            logger.debug(f"Saved message from {username} in chat {chat_id}, cleaned old messages")
         except Exception as e:
             logger.error(f"Error saving message: {e}")
 
@@ -105,15 +114,6 @@ class DBService:
         except Exception as e:
             logger.error(f"Error deleting messages: {e}")
 
-    def cleanup_old_messages(self) -> None:
-        """Delete messages older than MESSAGE_RETENTION_DAYS"""
-        try:
-            cutoff = datetime.now(timezone.utc) - timedelta(days=config.MESSAGE_RETENTION_DAYS)
-            self.client.table('messages').delete().lt('created_at', cutoff.isoformat()).execute()
-            logger.info(f"Cleaned up messages older than {config.MESSAGE_RETENTION_DAYS} days")
-        except Exception as e:
-            logger.error(f"Error cleaning up messages: {e}")
-
     # ================================================
     # PERSONALITIES
     # ================================================
@@ -155,7 +155,8 @@ class DBService:
         name: str,
         display_name: str,
         system_prompt: str,
-        created_by_user_id: int
+        created_by_user_id: int,
+        emoji: str = '🎭'
     ) -> Optional[int]:
         """Create a custom personality"""
         try:
@@ -163,6 +164,7 @@ class DBService:
                 'name': name,
                 'display_name': display_name,
                 'system_prompt': system_prompt,
+                'emoji': emoji,
                 'is_custom': True,
                 'created_by_user_id': created_by_user_id,
                 'is_active': True
@@ -295,3 +297,23 @@ class DBService:
             logger.debug(f"Logged event: {event_type} for user {user_id}")
         except Exception as e:
             logger.error(f"Error logging event: {e}")
+
+    def get_user_stats(self, user_id: int) -> dict:
+        """Get user statistics from analytics table"""
+        try:
+            response = self.client.table('analytics')\
+                .select('event_type')\
+                .eq('user_id', user_id)\
+                .execute()
+
+            # Count events by type
+            stats = {}
+            for event in response.data:
+                event_type = event['event_type']
+                stats[event_type] = stats.get(event_type, 0) + 1
+
+            logger.debug(f"Retrieved stats for user {user_id}: {stats}")
+            return stats
+        except Exception as e:
+            logger.error(f"Error getting user stats: {e}")
+            return {}

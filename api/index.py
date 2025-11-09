@@ -77,16 +77,18 @@ except Exception as e:
 # CHECKPOINT 5: Import modules
 # ================================================
 try:
-    from modules.commands import start_command, help_command
+    from modules.commands import start_command, help_command, stats_command
     from modules.summaries import summary_command, summary_callback
     from modules.judge import judge_command
     from modules.personalities import (
         personality_command,
         personality_callback,
         receive_personality_name,
+        receive_personality_emoji,
         receive_personality_description,
         cancel_personality_creation,
         AWAITING_NAME,
+        AWAITING_EMOJI,
         AWAITING_DESCRIPTION
     )
     modules_imported = True
@@ -206,6 +208,7 @@ def create_bot_application():
     # Basic commands
     app.add_handler(CommandHandler("start", start_command))
     app.add_handler(CommandHandler(config.COMMAND_HELP, help_command))
+    app.add_handler(CommandHandler("stats", stats_command))
 
     # Summary command
     app.add_handler(CommandHandler(config.COMMAND_SUMMARY, summary_command))
@@ -226,6 +229,9 @@ def create_bot_application():
         states={
             AWAITING_NAME: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, receive_personality_name)
+            ],
+            AWAITING_EMOJI: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, receive_personality_emoji)
             ],
             AWAITING_DESCRIPTION: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, receive_personality_description)

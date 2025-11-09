@@ -123,29 +123,56 @@ async def _summary_in_group(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
 
 async def _summary_in_dm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle /суть in DM - show chat selection"""
+    """Handle /sut in DM - show chat selection"""
     user = update.effective_user
     db = DBService()
 
-    # Get all chats where bot is present
-    # Note: We need to query Telegram API for this, not DB
-    # For now, we'll query chats from chat_metadata table
-    # TODO: Implement proper chat discovery via Telegram API
+    # 1. Получить все чаты из БД
+    all_chats = db.get_all_chats()
+
+    if not all_chats:
+        await update.message.reply_text(
+            "📭 Бот пока не добавлен ни в один чат.\n\n"
+            "Добавь меня в групповой чат, чтобы я мог делать саммари!"
+        )
+        return
+
+    # 2. Фильтровать чаты где юзер является участником
+    user_chats = []
+    for chat in all_chats:
+        # Проверка членства через Telegram API
+        ok, _ = await validate_chat_access(context.bot, chat.chat_id, user.id)
+        if ok:
+            user_chats.append(chat)
+
+    if not user_chats:
+        await update.message.reply_text(
+            "📭 У нас нет общих чатов.\n\n"
+            "Добавь меня в чат, где ты состоишь!"
+        )
+        return
+
+    # 3. Создать inline кнопки для каждого чата
+    keyboard = []
+    for chat in user_chats:
+        # HMAC подпись для безопасности
+        signature = create_signature(chat.chat_id, user.id)
+        callback_data = f"summary:{chat.chat_id}:{signature}"
+
+        # Эмодзи из модели Chat
+        button_text = f"{chat.emoji} {chat.chat_title or 'Чат'}"
+
+        keyboard.append([InlineKeyboardButton(
+            button_text,
+            callback_data=callback_data
+        )])
+
+    reply_markup = InlineKeyboardMarkup(keyboard)
 
     await update.message.reply_text(
-        "💡 Используй команду /sut прямо в групповом чате!\n\n"
-        "Бот сделает саммари сообщений за последние 24 часа.\n\n"
-        "Также можно указать период:\n"
-        "• /sut 30м - за 30 минут\n"
-        "• /sut 2ч - за 2 часа\n"
-        "• /sut сегодня - с начала дня"
+        "📋 Выбери чат для саммари:",
+        reply_markup=reply_markup
     )
-
-    # Future implementation:
-    # 1. Get all chats from chat_metadata
-    # 2. Validate bot and user membership
-    # 3. Show inline keyboard with chat buttons
-    # 4. Each button has callback_data with HMAC signature
 
 
 async def summary_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

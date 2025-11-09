@@ -28,3 +28,4 @@ python-dateutil==2.9.0
 # For Vercel Serverless Functions
 # (Vercel automatically provides these, but good to specify)
 flask==3.0.3
+werkzeug==3.0.3

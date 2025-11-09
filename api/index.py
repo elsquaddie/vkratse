@@ -3,6 +3,7 @@ Telegram Bot Webhook Handler - FIXED VERSION
 Entry point for Vercel serverless function
 
 FIX: Removed Werkzeug dependency, using pure WSGI
+FIX: Graceful degradation - no raise in imports
 """
 
 import sys
@@ -22,6 +23,13 @@ def log(message):
 # ================================================
 log("✅ CHECKPOINT 1: Module api/index.py loaded successfully")
 
+# Import success flags
+telegram_imported = False
+config_imported = False
+services_imported = False
+modules_imported = False
+bot_initialized = False
+
 # ================================================
 # CHECKPOINT 2: Import telegram
 # ================================================
@@ -36,10 +44,10 @@ try:
         filters
     )
     from telegram.constants import ChatType
+    telegram_imported = True
     log("✅ CHECKPOINT 2: telegram imports successful")
 except Exception as e:
     log(f"❌ CHECKPOINT 2 FAILED: telegram import error: {e}")
-    raise
 
 # ================================================
 # CHECKPOINT 3: Import config
@@ -47,20 +55,23 @@ except Exception as e:
 try:
     import config
     from config import logger
+    config_imported = True
     log("✅ CHECKPOINT 3: config import successful")
 except Exception as e:
     log(f"❌ CHECKPOINT 3 FAILED: config import error: {e}")
-    raise
+    # Create dummy logger for diagnostics
+    import logging
+    logger = logging.getLogger(__name__)
 
 # ================================================
 # CHECKPOINT 4: Import services
 # ================================================
 try:
     from services import DBService
+    services_imported = True
     log("✅ CHECKPOINT 4: services import successful")
 except Exception as e:
     log(f"❌ CHECKPOINT 4 FAILED: services import error: {e}")
-    raise
 
 # ================================================
 # CHECKPOINT 5: Import modules
@@ -78,79 +89,86 @@ try:
         AWAITING_NAME,
         AWAITING_DESCRIPTION
     )
+    modules_imported = True
     log("✅ CHECKPOINT 5: modules import successful")
 except Exception as e:
     log(f"❌ CHECKPOINT 5 FAILED: modules import error: {e}")
-    raise
 
 log("✅ CHECKPOINT 6: All imports completed")
 
+# Global bot application (will be set if initialization succeeds)
+bot_application = None
 
 # ================================================
 # CHECKPOINT 7: Initialize bot application
 # ================================================
-try:
-    bot_application = Application.builder().token(config.TELEGRAM_BOT_TOKEN).build()
-    log("✅ CHECKPOINT 7: Bot application initialized")
-except Exception as e:
-    log(f"❌ CHECKPOINT 7 FAILED: Bot initialization error: {e}")
-    raise
+if telegram_imported and config_imported:
+    try:
+        bot_application = Application.builder().token(config.TELEGRAM_BOT_TOKEN).build()
+        bot_initialized = True
+        log("✅ CHECKPOINT 7: Bot application initialized")
+    except Exception as e:
+        log(f"❌ CHECKPOINT 7 FAILED: Bot initialization error: {e}")
+        bot_initialized = False
+else:
+    log("⚠️ CHECKPOINT 7 SKIPPED: Required imports missing")
 
 
 # ================================================
-# Message handlers
+# Message handlers (only if bot initialized)
 # ================================================
-async def log_message_to_db(update: Update, context) -> None:
-    """Log all text messages to database"""
-    if not update.message or not update.message.text:
-        return
+if bot_initialized:
+    async def log_message_to_db(update: Update, context) -> None:
+        """Log all text messages to database"""
+        if not update.message or not update.message.text:
+            return
 
-    message = update.message
-    chat = message.chat
-    user = message.from_user
+        message = update.message
+        chat = message.chat
+        user = message.from_user
 
-    # Only log messages from groups
-    if chat.type in [ChatType.GROUP, ChatType.SUPERGROUP]:
-        db = DBService()
-
-        # Save message
-        db.save_message(
-            chat_id=chat.id,
-            user_id=user.id if user else None,
-            username=user.username if user else None,
-            message_text=message.text
-        )
-
-        # Update chat metadata
-        db.save_chat_metadata(
-            chat_id=chat.id,
-            chat_title=chat.title,
-            chat_type=chat.type
-        )
-
-        logger.debug(f"Logged message from {user.username if user else 'unknown'} in chat {chat.id}")
-
-
-async def handle_bot_added_to_chat(update: Update, context) -> None:
-    """Handle bot being added to a chat"""
-    message = update.message
-    chat = message.chat
-
-    # Check if bot was added
-    for member in message.new_chat_members:
-        if member.id == context.bot.id:
-            logger.info(f"Bot added to chat {chat.id} ({chat.title})")
-
-            # Save chat metadata
+        # Only log messages from groups
+        if chat.type in [ChatType.GROUP, ChatType.SUPERGROUP]:
             db = DBService()
+
+            # Save message
+            db.save_message(
+                chat_id=chat.id,
+                user_id=user.id if user else None,
+                username=user.username if user else None,
+                message_text=message.text
+            )
+
+            # Update chat metadata
             db.save_chat_metadata(
                 chat_id=chat.id,
                 chat_title=chat.title,
                 chat_type=chat.type
             )
 
-            # Send welcome message
-            welcome_text = f"""👋 Привет! Я добавлен в чат.
+            logger.debug(f"Logged message from {user.username if user else 'unknown'} in chat {chat.id}")
+
+
+    async def handle_bot_added_to_chat(update: Update, context) -> None:
+        """Handle bot being added to a chat"""
+        message = update.message
+        chat = message.chat
+
+        # Check if bot was added
+        for member in message.new_chat_members:
+            if member.id == context.bot.id:
+                logger.info(f"Bot added to chat {chat.id} ({chat.title})")
+
+                # Save chat metadata
+                db = DBService()
+                db.save_chat_metadata(
+                    chat_id=chat.id,
+                    chat_title=chat.title,
+                    chat_type=chat.type
+                )
+
+                # Send welcome message
+                welcome_text = f"""👋 Привет! Я добавлен в чат.
 
 🎯 Что умею:
 • /{config.COMMAND_SUMMARY} — саммари чата
@@ -159,33 +177,32 @@ async def handle_bot_added_to_chat(update: Update, context) -> None:
 
 /{config.COMMAND_HELP} — полная справка"""
 
-            await message.reply_text(welcome_text)
-            break
+                await message.reply_text(welcome_text)
+                break
 
 
-async def handle_bot_removed_from_chat(update: Update, context) -> None:
-    """Handle bot being removed from a chat"""
-    message = update.message
-    chat = message.chat
-    left_member = message.left_chat_member
+    async def handle_bot_removed_from_chat(update: Update, context) -> None:
+        """Handle bot being removed from a chat"""
+        message = update.message
+        chat = message.chat
+        left_member = message.left_chat_member
 
-    # Check if bot was removed
-    if left_member and left_member.id == context.bot.id:
-        logger.info(f"Bot removed from chat {chat.id} ({chat.title})")
+        # Check if bot was removed
+        if left_member and left_member.id == context.bot.id:
+            logger.info(f"Bot removed from chat {chat.id} ({chat.title})")
 
-        # Delete all data for this chat
-        db = DBService()
-        db.delete_messages_by_chat(chat.id)
-        db.delete_chat_metadata(chat.id)
+            # Delete all data for this chat
+            db = DBService()
+            db.delete_messages_by_chat(chat.id)
+            db.delete_chat_metadata(chat.id)
 
-        logger.info(f"Deleted all data for chat {chat.id}")
+            logger.info(f"Deleted all data for chat {chat.id}")
 
 
 # ================================================
 # CHECKPOINT 8: Setup handlers
 # ================================================
-def setup_handlers():
-    """Setup all command and message handlers"""
+if bot_initialized and modules_imported:
     try:
         # Basic commands
         bot_application.add_handler(CommandHandler("start", start_command))
@@ -243,11 +260,8 @@ def setup_handlers():
         log("✅ CHECKPOINT 8: All handlers registered successfully")
     except Exception as e:
         log(f"❌ CHECKPOINT 8 FAILED: Handler setup error: {e}")
-        raise
-
-
-# Setup handlers on import
-setup_handlers()
+else:
+    log("⚠️ CHECKPOINT 8 SKIPPED: Bot not initialized or modules missing")
 
 
 # ================================================
@@ -255,6 +269,10 @@ setup_handlers()
 # ================================================
 async def process_update(update_data: dict):
     """Process a single update from Telegram"""
+    if not bot_initialized:
+        log("⚠️ Cannot process update: bot not initialized")
+        return
+
     try:
         log(f"✅ CHECKPOINT 9: Processing update {update_data.get('update_id', 'unknown')}")
         update = Update.de_json(update_data, bot_application.bot)
@@ -294,7 +312,25 @@ def application(environ, start_response):
                 'status': 'ok',
                 'message': 'Bot is running. Use POST for webhook.',
                 'method': method,
-                'path': path
+                'path': path,
+                'bot_initialized': bot_initialized
+            }).encode('utf-8')
+
+            return [response_body]
+
+        # Check if bot is initialized
+        if not bot_initialized:
+            log("⚠️ Bot not initialized, cannot process webhook")
+            status = '503 Service Unavailable'
+            headers = [('Content-Type', 'application/json')]
+            start_response(status, headers)
+
+            response_body = json.dumps({
+                'error': 'Bot not initialized',
+                'telegram_imported': telegram_imported,
+                'config_imported': config_imported,
+                'services_imported': services_imported,
+                'modules_imported': modules_imported
             }).encode('utf-8')
 
             return [response_body]
@@ -350,7 +386,7 @@ def application(environ, start_response):
 # Vercel looks for 'app' or 'application' in WSGI mode
 app = application
 
-log("✅ CHECKPOINT 16: Module fully loaded, bot ready to receive webhooks")
+log(f"✅ CHECKPOINT 16: Module fully loaded (bot_initialized={bot_initialized})")
 
 
 # ================================================
@@ -359,7 +395,12 @@ log("✅ CHECKPOINT 16: Module fully loaded, bot ready to receive webhooks")
 if __name__ == '__main__':
     log("🧪 Running in local test mode")
     print("\n" + "="*60)
-    print("Bot is ready!")
-    print("="*60)
-    print(f"Handlers registered: {len(bot_application.handlers)}")
+    print("Bot status:")
+    print(f"  telegram_imported: {telegram_imported}")
+    print(f"  config_imported: {config_imported}")
+    print(f"  services_imported: {services_imported}")
+    print(f"  modules_imported: {modules_imported}")
+    print(f"  bot_initialized: {bot_initialized}")
+    if bot_initialized:
+        print(f"  handlers: {len(bot_application.handlers)}")
     print("="*60 + "\n")

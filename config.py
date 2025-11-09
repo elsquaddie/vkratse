@@ -60,11 +60,11 @@ MAX_PERSONALITY_DESCRIPTION_LENGTH = int(os.getenv('MAX_PERSONALITY_DESCRIPTION_
 MIN_PERSONALITY_DESCRIPTION_LENGTH = int(os.getenv('MIN_PERSONALITY_DESCRIPTION_LENGTH', 10))
 
 # ================================================
-# COMMAND NAMES (updated to Russian)
+# COMMAND NAMES (Latin characters - Telegram API requirement)
 # ================================================
-COMMAND_SUMMARY = 'суть'
-COMMAND_JUDGE = 'рассуди'
-COMMAND_PERSONALITY = 'личность'
+COMMAND_SUMMARY = 'sut'
+COMMAND_JUDGE = 'rassudi'
+COMMAND_PERSONALITY = 'lichnost'
 COMMAND_START = 'start'
 COMMAND_HELP = 'help'
 

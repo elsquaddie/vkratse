@@ -96,23 +96,12 @@ except Exception as e:
 
 log("✅ CHECKPOINT 6: All imports completed")
 
-# Global bot application (will be set if initialization succeeds)
-bot_application = None
-bot_app_initialized = False  # Track if Application.initialize() was called
-
-# ================================================
-# CHECKPOINT 7: Initialize bot application
-# ================================================
-if telegram_imported and config_imported:
-    try:
-        bot_application = Application.builder().token(config.TELEGRAM_BOT_TOKEN).build()
-        bot_initialized = True
-        log("✅ CHECKPOINT 7: Bot application initialized")
-    except Exception as e:
-        log(f"❌ CHECKPOINT 7 FAILED: Bot initialization error: {e}")
-        bot_initialized = False
+# Check if we can initialize bot
+bot_initialized = telegram_imported and config_imported
+if bot_initialized:
+    log("✅ CHECKPOINT 7: Bot can be initialized (will create Application per request)")
 else:
-    log("⚠️ CHECKPOINT 7 SKIPPED: Required imports missing")
+    log("⚠️ CHECKPOINT 7: Required imports missing, bot cannot be initialized")
 
 
 # ================================================
@@ -132,11 +121,11 @@ if bot_initialized:
         if chat.type in [ChatType.GROUP, ChatType.SUPERGROUP]:
             db = DBService()
 
-            # Save message
+            # Save message - use first_name instead of username
             db.save_message(
                 chat_id=chat.id,
                 user_id=user.id if user else None,
-                username=user.username if user else None,
+                username=user.first_name if user else None,  # FIX: Use first_name instead of username
                 message_text=message.text
             )
 
@@ -147,7 +136,7 @@ if bot_initialized:
                 chat_type=chat.type
             )
 
-            logger.debug(f"Logged message from {user.username if user else 'unknown'} in chat {chat.id}")
+            logger.debug(f"Logged message from {user.first_name if user else 'unknown'} in chat {chat.id}")
 
 
     async def handle_bot_added_to_chat(update: Update, context) -> None:
@@ -201,96 +190,120 @@ if bot_initialized:
 
 
 # ================================================
-# CHECKPOINT 8: Setup handlers
+# CHECKPOINT 8: Create bot application function
 # ================================================
+def create_bot_application():
+    """
+    Create and configure a new bot Application instance
+
+    FIX: Creating new Application per request to avoid event loop issues in serverless
+    """
+    if not bot_initialized or not modules_imported:
+        raise RuntimeError("Cannot create bot application - imports failed")
+
+    app = Application.builder().token(config.TELEGRAM_BOT_TOKEN).build()
+
+    # Basic commands
+    app.add_handler(CommandHandler("start", start_command))
+    app.add_handler(CommandHandler(config.COMMAND_HELP, help_command))
+
+    # Summary command
+    app.add_handler(CommandHandler(config.COMMAND_SUMMARY, summary_command))
+    app.add_handler(CallbackQueryHandler(
+        summary_callback,
+        pattern="^summary:"
+    ))
+
+    # Judge command
+    app.add_handler(CommandHandler(config.COMMAND_JUDGE, judge_command))
+
+    # Personality command with conversation for creating custom ones
+    personality_conv = ConversationHandler(
+        entry_points=[
+            CommandHandler(config.COMMAND_PERSONALITY, personality_command),
+            CallbackQueryHandler(personality_callback, pattern="^pers:")
+        ],
+        states={
+            AWAITING_NAME: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, receive_personality_name)
+            ],
+            AWAITING_DESCRIPTION: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, receive_personality_description)
+            ]
+        },
+        fallbacks=[
+            CommandHandler("cancel", cancel_personality_creation)
+        ],
+        name="personality_conversation",
+        persistent=False
+    )
+    app.add_handler(personality_conv)
+
+    # Log all messages to database
+    app.add_handler(MessageHandler(
+        filters.TEXT & ~filters.COMMAND,
+        log_message_to_db
+    ))
+
+    # Handle bot being added/removed from chats
+    app.add_handler(MessageHandler(
+        filters.StatusUpdate.NEW_CHAT_MEMBERS,
+        handle_bot_added_to_chat
+    ))
+    app.add_handler(MessageHandler(
+        filters.StatusUpdate.LEFT_CHAT_MEMBER,
+        handle_bot_removed_from_chat
+    ))
+
+    log("✅ CHECKPOINT 8: Created new bot Application with all handlers")
+    return app
+
 if bot_initialized and modules_imported:
-    try:
-        # Basic commands
-        bot_application.add_handler(CommandHandler("start", start_command))
-        bot_application.add_handler(CommandHandler(config.COMMAND_HELP, help_command))
-
-        # Summary command
-        bot_application.add_handler(CommandHandler(config.COMMAND_SUMMARY, summary_command))
-        bot_application.add_handler(CallbackQueryHandler(
-            summary_callback,
-            pattern="^summary:"
-        ))
-
-        # Judge command
-        bot_application.add_handler(CommandHandler(config.COMMAND_JUDGE, judge_command))
-
-        # Personality command with conversation for creating custom ones
-        personality_conv = ConversationHandler(
-            entry_points=[
-                CommandHandler(config.COMMAND_PERSONALITY, personality_command),
-                CallbackQueryHandler(personality_callback, pattern="^pers:")
-            ],
-            states={
-                AWAITING_NAME: [
-                    MessageHandler(filters.TEXT & ~filters.COMMAND, receive_personality_name)
-                ],
-                AWAITING_DESCRIPTION: [
-                    MessageHandler(filters.TEXT & ~filters.COMMAND, receive_personality_description)
-                ]
-            },
-            fallbacks=[
-                CommandHandler("cancel", cancel_personality_creation)
-            ],
-            name="personality_conversation",
-            persistent=False
-        )
-        bot_application.add_handler(personality_conv)
-
-        # Log all messages to database
-        bot_application.add_handler(MessageHandler(
-            filters.TEXT & ~filters.COMMAND,
-            log_message_to_db
-        ))
-
-        # Handle bot being added/removed from chats
-        bot_application.add_handler(MessageHandler(
-            filters.StatusUpdate.NEW_CHAT_MEMBERS,
-            handle_bot_added_to_chat
-        ))
-        bot_application.add_handler(MessageHandler(
-            filters.StatusUpdate.LEFT_CHAT_MEMBER,
-            handle_bot_removed_from_chat
-        ))
-
-        logger.info("All handlers registered")
-        log("✅ CHECKPOINT 8: All handlers registered successfully")
-    except Exception as e:
-        log(f"❌ CHECKPOINT 8 FAILED: Handler setup error: {e}")
+    log("✅ Bot application factory ready")
 else:
-    log("⚠️ CHECKPOINT 8 SKIPPED: Bot not initialized or modules missing")
+    log("⚠️ Bot application cannot be created - imports failed")
 
 
 # ================================================
 # CHECKPOINT 9: Webhook processing
 # ================================================
 async def process_update(update_data: dict):
-    """Process a single update from Telegram"""
-    global bot_app_initialized
+    """
+    Process a single update from Telegram
 
+    FIX: Creating new Application per request to avoid event loop issues
+    """
     if not bot_initialized:
         log("⚠️ Cannot process update: bot not initialized")
         return
 
+    app = None
     try:
-        # Initialize Application on first use (lazy initialization)
-        if not bot_app_initialized:
-            log("⚠️ Initializing bot application (first request)...")
-            await bot_application.initialize()
-            bot_app_initialized = True
-            log("✅ Bot application initialized successfully")
-
         log(f"✅ CHECKPOINT 9: Processing update {update_data.get('update_id', 'unknown')}")
-        update = Update.de_json(update_data, bot_application.bot)
-        await bot_application.process_update(update)
+
+        # Create new Application for this request
+        app = create_bot_application()
+
+        # Initialize it
+        await app.initialize()
+        log("✅ Application initialized for this request")
+
+        # Process the update
+        update = Update.de_json(update_data, app.bot)
+        await app.process_update(update)
+
         log(f"✅ CHECKPOINT 10: Update processed successfully")
     except Exception as e:
         logger.error(f"Error processing update: {e}", exc_info=True)
         log(f"❌ CHECKPOINT 10 FAILED: Update processing error: {e}")
+    finally:
+        # Clean up resources
+        if app:
+            try:
+                await app.shutdown()
+                log("✅ Application shutdown complete")
+            except Exception as e:
+                log(f"⚠️ Error during app shutdown: {e}")
 
 
 # ================================================

@@ -259,6 +259,19 @@ class DBService:
         except Exception as e:
             logger.error(f"Error deleting chat metadata: {e}")
 
+    def get_all_chats(self) -> List[Chat]:
+        """Get all chats where bot is active"""
+        try:
+            response = self.client.table('chat_metadata')\
+                .select('*')\
+                .order('last_activity', desc=True)\
+                .execute()
+
+            return [Chat.from_dict(chat) for chat in response.data]
+        except Exception as e:
+            logger.error(f"Error getting chats: {e}")
+            return []
+
     # ================================================
     # ANALYTICS
     # ================================================

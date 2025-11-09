@@ -1644,4 +1644,436 @@ __all__ = [
 
 ---
 
+## 🎯 ПЛАН РАБОТ (Детальная декомпозиция)
+
+### ❗ ВАЖНОЕ ПРАВИЛО ДЛЯ CLAUDE
+**При завершении каждого пункта плана:**
+1. Обнови статус в этом разделе (⏳ → ✅)
+2. Закоммить изменения
+3. Обновить README.md если нужно
+
+---
+
+### 📌 ПУНКТ 1: /sut в ЛС с выбором чата (КРИТИЧНО)
+**Статус:** ✅ ЗАВЕРШЕНО
+**Файлы:** `services/db_service.py`, `modules/summaries.py`
+
+#### 1.1. Добавить метод get_all_chats() в DBService
+**Файл:** `services/db_service.py`
+
+**Что добавить:**
+```python
+def get_all_chats(self) -> List[Chat]:
+    """Get all chats where bot is active"""
+    try:
+        response = self.client.table('chat_metadata')\
+            .select('*')\
+            .order('last_activity', desc=True)\
+            .execute()
+
+        return [Chat.from_dict(chat) for chat in response.data]
+    except Exception as e:
+        logger.error(f"Error getting chats: {e}")
+        return []
+```
+
+**Критерий готовности:** Метод возвращает список объектов Chat из БД
+
+---
+
+#### 1.2. Реализовать _summary_in_dm() с кнопками выбора чата
+**Файл:** `modules/summaries.py:125-149`
+
+**Текущий код (заглушка):**
+```python
+async def _summary_in_dm(...):
+    await update.message.reply_text(
+        "💡 Используй команду /sut прямо в групповом чате!"
+    )
+```
+
+**Новая реализация:**
+```python
+async def _summary_in_dm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle /sut in DM - show chat selection"""
+    user = update.effective_user
+    db = DBService()
+
+    # 1. Получить все чаты из БД
+    all_chats = db.get_all_chats()
+
+    if not all_chats:
+        await update.message.reply_text(
+            "📭 Бот пока не добавлен ни в один чат.\n\n"
+            "Добавь меня в групповой чат, чтобы я мог делать саммари!"
+        )
+        return
+
+    # 2. Фильтровать чаты где юзер является участником
+    user_chats = []
+    for chat in all_chats:
+        # Проверка членства через Telegram API
+        ok, _ = await validate_chat_access(context.bot, chat.chat_id, user.id)
+        if ok:
+            user_chats.append(chat)
+
+    if not user_chats:
+        await update.message.reply_text(
+            "📭 У нас нет общих чатов.\n\n"
+            "Добавь меня в чат, где ты состоишь!"
+        )
+        return
+
+    # 3. Создать inline кнопки для каждого чата
+    keyboard = []
+    for chat in user_chats:
+        # HMAC подпись для безопасности
+        signature = create_signature(chat.chat_id, user.id)
+        callback_data = f"summary:{chat.chat_id}:{signature}"
+
+        # Эмодзи в зависимости от типа чата
+        emoji = "💬" if chat.chat_type == "private" else "👥"
+        button_text = f"{emoji} {chat.chat_title or 'Чат'}"
+
+        keyboard.append([InlineKeyboardButton(
+            button_text,
+            callback_data=callback_data
+        )])
+
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    await update.message.reply_text(
+        "📋 Выбери чат для саммари:",
+        reply_markup=reply_markup
+    )
+```
+
+**Критерий готовности:**
+- Команда /sut в ЛС показывает кнопки с чатами
+- Показываются только чаты где юзер является участником
+- Каждая кнопка имеет HMAC подпись
+
+---
+
+#### 1.3. Проверить что callback handler работает
+**Файл:** `modules/summaries.py:151-226`
+
+**Callback handler уже реализован:** `summary_callback()`
+
+**Что проверить:**
+- ✅ Парсинг callback_data: `summary:{chat_id}:{signature}`
+- ✅ Проверка HMAC подписи
+- ✅ Проверка членства через validate_chat_access()
+- ✅ Rate limiting
+- ✅ Генерация саммари
+- ✅ Отправка в ЛС
+
+**Критерий готовности:** Клик по кнопке → саммари приходит в ЛС
+
+---
+
+### 📌 ПУНКТ 2: Автоудаление старых сообщений
+**Статус:** ⏳ Ожидает
+**Файлы:** `api/index.py`, `services/db_service.py`
+
+#### 2.1. Изучить пример автоудаления
+**Логика из примера:**
+При каждой записи сообщения (`log_message_handler`) сразу удалять старые:
+
+```python
+from datetime import datetime, timezone, timedelta
+
+# При записи сообщения
+supabase.table('messages').insert({...}).execute()
+
+# Сразу удалить старые (например, старше 4 часов)
+time_threshold = datetime.now(timezone.utc) - timedelta(hours=4)
+supabase.table('messages').delete()\
+    .eq('chat_id', chat_id)\
+    .lt('created_at', time_threshold.isoformat())\
+    .execute()
+```
+
+**Преимущества:**
+- Автоматическая очистка при каждой активности в чате
+- Не нужен отдельный cron job
+- Данные всегда актуальны
+
+---
+
+#### 2.2. Модифицировать save_message() в DBService
+**Файл:** `services/db_service.py:29-46`
+
+**Текущий код:**
+```python
+def save_message(self, chat_id: int, user_id: Optional[int],
+                 username: Optional[str], message_text: Optional[str]) -> None:
+    try:
+        self.client.table('messages').insert({
+            'chat_id': chat_id,
+            'user_id': user_id,
+            'username': username,
+            'message_text': message_text
+        }).execute()
+        logger.debug(f"Saved message from {username} in chat {chat_id}")
+    except Exception as e:
+        logger.error(f"Error saving message: {e}")
+```
+
+**Новый код:**
+```python
+def save_message(self, chat_id: int, user_id: Optional[int],
+                 username: Optional[str], message_text: Optional[str]) -> None:
+    try:
+        # 1. Сохранить новое сообщение
+        self.client.table('messages').insert({
+            'chat_id': chat_id,
+            'user_id': user_id,
+            'username': username,
+            'message_text': message_text
+        }).execute()
+
+        # 2. Автоудаление старых сообщений (по MESSAGE_RETENTION_DAYS)
+        time_threshold = datetime.now(timezone.utc) - timedelta(days=config.MESSAGE_RETENTION_DAYS)
+        self.client.table('messages').delete()\
+            .eq('chat_id', chat_id)\
+            .lt('created_at', time_threshold.isoformat())\
+            .execute()
+
+        logger.debug(f"Saved message from {username} in chat {chat_id}, cleaned old messages")
+    except Exception as e:
+        logger.error(f"Error saving message: {e}")
+```
+
+**Критерий готовности:** При каждой записи сообщения старые автоматически удаляются
+
+---
+
+#### 2.3. Удалить метод cleanup_old_messages() (не нужен)
+**Файл:** `services/db_service.py:108-115`
+
+Метод больше не нужен, т.к. очистка происходит автоматически в `save_message()`
+
+**Критерий готовности:** Метод удалён, импорты почищены
+
+---
+
+### 📌 ПУНКТ 3: Emoji в таблице personalities
+**Статус:** ⏳ Ожидает
+**Файлы:** `sql/`, `models/personality.py`, `services/db_service.py`
+
+#### 3.1. Создать миграцию для добавления колонки emoji
+**Новый файл:** `sql/add_emoji_to_personalities.sql`
+
+```sql
+-- Добавить колонку emoji
+ALTER TABLE personalities ADD COLUMN IF NOT EXISTS emoji VARCHAR(10) DEFAULT '🎭';
+
+-- Обновить emoji для базовых личностей
+UPDATE personalities SET emoji = '🎓' WHERE name = 'neutral';
+UPDATE personalities SET emoji = '🏭' WHERE name = 'bydlan';
+UPDATE personalities SET emoji = '🧙' WHERE name = 'philosopher';
+UPDATE personalities SET emoji = '👟' WHERE name = 'gopnik';
+UPDATE personalities SET emoji = '💼' WHERE name = 'oligarch';
+UPDATE personalities SET emoji = '😂' WHERE name = 'comedian';
+UPDATE personalities SET emoji = '🔬' WHERE name = 'scientist';
+```
+
+**Критерий готовности:** Миграция создана, нужно выполнить в Supabase SQL Editor
+
+---
+
+#### 3.2. Обновить модель Personality
+**Файл:** `models/personality.py:12-69`
+
+**Добавить поле:**
+```python
+@dataclass
+class Personality:
+    id: int
+    name: str
+    display_name: str
+    system_prompt: str
+    emoji: str  # <-- НОВОЕ ПОЛЕ
+    is_custom: bool
+    created_by_user_id: Optional[int]
+    is_active: bool
+    created_at: datetime
+```
+
+**Обновить from_dict():**
+```python
+@classmethod
+def from_dict(cls, data: dict) -> 'Personality':
+    return cls(
+        id=data['id'],
+        name=data['name'],
+        display_name=data['display_name'],
+        system_prompt=data['system_prompt'],
+        emoji=data.get('emoji', '🎭'),  # <-- НОВОЕ
+        is_custom=data.get('is_custom', False),
+        created_by_user_id=data.get('created_by_user_id'),
+        is_active=data.get('is_active', True),
+        created_at=...
+    )
+```
+
+**Удалить property emoji (строки 52-64):**
+```python
+# УДАЛИТЬ ЭТО:
+@property
+def emoji(self) -> str:
+    """Get emoji for personality"""
+    emoji_map = {...}
+    return emoji_map.get(self.name, '🎭')
+```
+
+**Критерий готовности:** Emoji берётся из БД, а не из хардкода
+
+---
+
+#### 3.3. Обновить создание кастомных личностей
+**Файл:** `modules/personalities.py:216-269`
+
+При создании кастомной личности запрашивать emoji:
+
+**Добавить состояние в ConversationHandler:**
+```python
+AWAITING_NAME = 1
+AWAITING_EMOJI = 2      # <-- НОВОЕ
+AWAITING_DESCRIPTION = 3 # <-- БЫЛО 2
+```
+
+**Логика:**
+1. Юзер вводит название → AWAITING_EMOJI
+2. Юзер вводит emoji (1 символ) → AWAITING_DESCRIPTION
+3. Юзер вводит описание → создать личность
+
+**Критерий готовности:** Кастомные личности создаются с emoji
+
+---
+
+### 📌 ПУНКТ 4: Команда /stats для аналитики
+**Статус:** ⏳ Ожидает
+**Файлы:** `modules/commands.py`, `services/db_service.py`
+
+#### 4.1. Добавить метод get_user_stats() в DBService
+**Файл:** `services/db_service.py`
+
+```python
+def get_user_stats(self, user_id: int) -> dict:
+    """Get user statistics from analytics table"""
+    try:
+        response = self.client.table('analytics')\
+            .select('event_type')\
+            .eq('user_id', user_id)\
+            .execute()
+
+        # Подсчитать количество событий каждого типа
+        stats = {}
+        for event in response.data:
+            event_type = event['event_type']
+            stats[event_type] = stats.get(event_type, 0) + 1
+
+        return stats
+    except Exception as e:
+        logger.error(f"Error getting user stats: {e}")
+        return {}
+```
+
+**Критерий готовности:** Метод возвращает словарь с количеством событий
+
+---
+
+#### 4.2. Создать команду /stats
+**Файл:** `modules/commands.py`
+
+```python
+async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Show user statistics"""
+    user = update.effective_user
+    db = DBService()
+
+    stats = db.get_user_stats(user.id)
+
+    if not stats:
+        await update.message.reply_text(
+            "📊 Статистика пока пуста.\n\n"
+            "Используй команды /sut и /rassudi чтобы накопить статистику!"
+        )
+        return
+
+    # Форматировать статистику
+    summary_count = stats.get('summary', 0) + stats.get('summary_dm', 0)
+    judge_count = stats.get('judge', 0)
+
+    text = f"""📊 Твоя статистика
+
+🔍 Саммари создано: {summary_count}
+⚖️ Споров рассужено: {judge_count}
+
+Продолжай пользоваться ботом! 🚀"""
+
+    await update.message.reply_text(text)
+```
+
+**Критерий готовности:** Команда /stats показывает статистику юзера
+
+---
+
+#### 4.3. Зарегистрировать handler в api/index.py
+**Файл:** `api/index.py`
+
+Добавить в `create_bot_application()`:
+
+```python
+from modules.commands import start_command, help_command, stats_command
+
+# ...
+app.add_handler(CommandHandler("stats", stats_command))
+```
+
+**Критерий готовности:** /stats работает в боте
+
+---
+
+### 📌 ПУНКТ 5: Тестирование и финальная полировка
+**Статус:** ⏳ Ожидает
+
+#### 5.1. Ручное тестирование
+- [ ] /sut в группе работает
+- [ ] /sut в ЛС показывает кнопки
+- [ ] Клик по кнопке → саммари в ЛС
+- [ ] Старые сообщения удаляются автоматически
+- [ ] /rassudi работает
+- [ ] /lichnost работает
+- [ ] Создание кастомной личности с emoji работает
+- [ ] /stats показывает статистику
+
+#### 5.2. Проверка безопасности
+- [ ] HMAC подписи проверяются
+- [ ] Rate limiting работает
+- [ ] Cooldown работает
+- [ ] Sanitization защищает от injection
+
+#### 5.3. Деплой на Vercel
+- [ ] Выполнить миграцию `add_emoji_to_personalities.sql` в Supabase
+- [ ] `vercel deploy --prod`
+- [ ] Проверить логи
+- [ ] Протестировать все команды в production
+
+---
+
+## ✅ КРИТЕРИЙ ЗАВЕРШЕНИЯ ВСЕГО ПЛАНА
+
+Бот готов к production если:
+1. ✅ /sut в ЛС работает с выбором чата
+2. ✅ Старые сообщения автоматически удаляются
+3. ✅ Emoji в БД, а не хардкод
+4. ✅ /stats показывает статистику
+5. ✅ Все тесты пройдены
+6. ✅ Deployment на Vercel успешен
+
+---
+
 **Документ готов для кодинга! Можно начинать с Фазы 1.** 🚀

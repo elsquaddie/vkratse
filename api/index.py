@@ -1,10 +1,13 @@
 """
-DIAGNOSTIC VERSION - Step 3: Adding project imports
-Постепенно добавляем импорты проектных модулей
+Telegram Bot Webhook Handler - FIXED VERSION
+Entry point for Vercel serverless function
+
+FIX: Removed Werkzeug dependency, using pure WSGI
 """
 
 import sys
 import json
+import asyncio
 from datetime import datetime
 
 
@@ -24,10 +27,19 @@ log("✅ CHECKPOINT 1: Module api/index.py loaded successfully")
 # ================================================
 try:
     from telegram import Update
-    from telegram.ext import Application
+    from telegram.ext import (
+        Application,
+        CommandHandler,
+        MessageHandler,
+        CallbackQueryHandler,
+        ConversationHandler,
+        filters
+    )
+    from telegram.constants import ChatType
     log("✅ CHECKPOINT 2: telegram imports successful")
 except Exception as e:
     log(f"❌ CHECKPOINT 2 FAILED: telegram import error: {e}")
+    raise
 
 # ================================================
 # CHECKPOINT 3: Import config
@@ -38,6 +50,7 @@ try:
     log("✅ CHECKPOINT 3: config import successful")
 except Exception as e:
     log(f"❌ CHECKPOINT 3 FAILED: config import error: {e}")
+    raise
 
 # ================================================
 # CHECKPOINT 4: Import services
@@ -47,6 +60,7 @@ try:
     log("✅ CHECKPOINT 4: services import successful")
 except Exception as e:
     log(f"❌ CHECKPOINT 4 FAILED: services import error: {e}")
+    raise
 
 # ================================================
 # CHECKPOINT 5: Import modules
@@ -67,58 +81,258 @@ try:
     log("✅ CHECKPOINT 5: modules import successful")
 except Exception as e:
     log(f"❌ CHECKPOINT 5 FAILED: modules import error: {e}")
+    raise
 
 log("✅ CHECKPOINT 6: All imports completed")
 
 
 # ================================================
-# Pure WSGI Application
+# CHECKPOINT 7: Initialize bot application
+# ================================================
+try:
+    bot_application = Application.builder().token(config.TELEGRAM_BOT_TOKEN).build()
+    log("✅ CHECKPOINT 7: Bot application initialized")
+except Exception as e:
+    log(f"❌ CHECKPOINT 7 FAILED: Bot initialization error: {e}")
+    raise
+
+
+# ================================================
+# Message handlers
+# ================================================
+async def log_message_to_db(update: Update, context) -> None:
+    """Log all text messages to database"""
+    if not update.message or not update.message.text:
+        return
+
+    message = update.message
+    chat = message.chat
+    user = message.from_user
+
+    # Only log messages from groups
+    if chat.type in [ChatType.GROUP, ChatType.SUPERGROUP]:
+        db = DBService()
+
+        # Save message
+        db.save_message(
+            chat_id=chat.id,
+            user_id=user.id if user else None,
+            username=user.username if user else None,
+            message_text=message.text
+        )
+
+        # Update chat metadata
+        db.save_chat_metadata(
+            chat_id=chat.id,
+            chat_title=chat.title,
+            chat_type=chat.type
+        )
+
+        logger.debug(f"Logged message from {user.username if user else 'unknown'} in chat {chat.id}")
+
+
+async def handle_bot_added_to_chat(update: Update, context) -> None:
+    """Handle bot being added to a chat"""
+    message = update.message
+    chat = message.chat
+
+    # Check if bot was added
+    for member in message.new_chat_members:
+        if member.id == context.bot.id:
+            logger.info(f"Bot added to chat {chat.id} ({chat.title})")
+
+            # Save chat metadata
+            db = DBService()
+            db.save_chat_metadata(
+                chat_id=chat.id,
+                chat_title=chat.title,
+                chat_type=chat.type
+            )
+
+            # Send welcome message
+            welcome_text = f"""👋 Привет! Я добавлен в чат.
+
+🎯 Что умею:
+• /{config.COMMAND_SUMMARY} — саммари чата
+• /{config.COMMAND_JUDGE} — рассудить спор
+• /{config.COMMAND_PERSONALITY} — выбрать стиль AI
+
+/{config.COMMAND_HELP} — полная справка"""
+
+            await message.reply_text(welcome_text)
+            break
+
+
+async def handle_bot_removed_from_chat(update: Update, context) -> None:
+    """Handle bot being removed from a chat"""
+    message = update.message
+    chat = message.chat
+    left_member = message.left_chat_member
+
+    # Check if bot was removed
+    if left_member and left_member.id == context.bot.id:
+        logger.info(f"Bot removed from chat {chat.id} ({chat.title})")
+
+        # Delete all data for this chat
+        db = DBService()
+        db.delete_messages_by_chat(chat.id)
+        db.delete_chat_metadata(chat.id)
+
+        logger.info(f"Deleted all data for chat {chat.id}")
+
+
+# ================================================
+# CHECKPOINT 8: Setup handlers
+# ================================================
+def setup_handlers():
+    """Setup all command and message handlers"""
+    try:
+        # Basic commands
+        bot_application.add_handler(CommandHandler("start", start_command))
+        bot_application.add_handler(CommandHandler(config.COMMAND_HELP, help_command))
+
+        # Summary command
+        bot_application.add_handler(CommandHandler(config.COMMAND_SUMMARY, summary_command))
+        bot_application.add_handler(CallbackQueryHandler(
+            summary_callback,
+            pattern="^summary:"
+        ))
+
+        # Judge command
+        bot_application.add_handler(CommandHandler(config.COMMAND_JUDGE, judge_command))
+
+        # Personality command with conversation for creating custom ones
+        personality_conv = ConversationHandler(
+            entry_points=[
+                CommandHandler(config.COMMAND_PERSONALITY, personality_command),
+                CallbackQueryHandler(personality_callback, pattern="^pers:")
+            ],
+            states={
+                AWAITING_NAME: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, receive_personality_name)
+                ],
+                AWAITING_DESCRIPTION: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, receive_personality_description)
+                ]
+            },
+            fallbacks=[
+                CommandHandler("cancel", cancel_personality_creation)
+            ],
+            name="personality_conversation",
+            persistent=False
+        )
+        bot_application.add_handler(personality_conv)
+
+        # Log all messages to database
+        bot_application.add_handler(MessageHandler(
+            filters.TEXT & ~filters.COMMAND,
+            log_message_to_db
+        ))
+
+        # Handle bot being added/removed from chats
+        bot_application.add_handler(MessageHandler(
+            filters.StatusUpdate.NEW_CHAT_MEMBERS,
+            handle_bot_added_to_chat
+        ))
+        bot_application.add_handler(MessageHandler(
+            filters.StatusUpdate.LEFT_CHAT_MEMBER,
+            handle_bot_removed_from_chat
+        ))
+
+        logger.info("All handlers registered")
+        log("✅ CHECKPOINT 8: All handlers registered successfully")
+    except Exception as e:
+        log(f"❌ CHECKPOINT 8 FAILED: Handler setup error: {e}")
+        raise
+
+
+# Setup handlers on import
+setup_handlers()
+
+
+# ================================================
+# CHECKPOINT 9: Webhook processing
+# ================================================
+async def process_update(update_data: dict):
+    """Process a single update from Telegram"""
+    try:
+        log(f"✅ CHECKPOINT 9: Processing update {update_data.get('update_id', 'unknown')}")
+        update = Update.de_json(update_data, bot_application.bot)
+        await bot_application.process_update(update)
+        log(f"✅ CHECKPOINT 10: Update processed successfully")
+    except Exception as e:
+        logger.error(f"Error processing update: {e}", exc_info=True)
+        log(f"❌ CHECKPOINT 10 FAILED: Update processing error: {e}")
+
+
+# ================================================
+# Pure WSGI Application for Vercel
 # ================================================
 def application(environ, start_response):
     """
     Pure WSGI application - Vercel Python runtime calls this
+
+    FIX: Using pure WSGI instead of Werkzeug
     """
     try:
-        log("✅ CHECKPOINT 7: WSGI application() called")
+        log("✅ CHECKPOINT 11: WSGI application() called")
 
         # Get request info from WSGI environ
         method = environ.get('REQUEST_METHOD', 'UNKNOWN')
         path = environ.get('PATH_INFO', 'UNKNOWN')
 
-        log(f"✅ CHECKPOINT 8: Request = {method} {path}")
+        log(f"✅ CHECKPOINT 12: Request = {method} {path}")
 
-        # Prepare response
+        # Only accept POST requests for webhook
+        if method != 'POST':
+            log(f"⚠️ Non-POST request: {method} {path}")
+            status = '200 OK'
+            headers = [('Content-Type', 'application/json')]
+            start_response(status, headers)
+
+            response_body = json.dumps({
+                'status': 'ok',
+                'message': 'Bot is running. Use POST for webhook.',
+                'method': method,
+                'path': path
+            }).encode('utf-8')
+
+            return [response_body]
+
+        # Read request body
+        try:
+            content_length = int(environ.get('CONTENT_LENGTH', 0))
+        except ValueError:
+            content_length = 0
+
+        if content_length > 0:
+            request_body = environ['wsgi.input'].read(content_length)
+            update_data = json.loads(request_body.decode('utf-8'))
+            log(f"✅ CHECKPOINT 13: Parsed webhook data, update_id={update_data.get('update_id', 'unknown')}")
+        else:
+            log("⚠️ Empty request body")
+            status = '400 Bad Request'
+            headers = [('Content-Type', 'application/json')]
+            start_response(status, headers)
+            return [json.dumps({'error': 'Empty request body'}).encode('utf-8')]
+
+        # Process update asynchronously
+        log("✅ CHECKPOINT 14: Running async update processing")
+        asyncio.run(process_update(update_data))
+
+        log("✅ CHECKPOINT 15: Webhook processed successfully")
+
+        # Return success
         status = '200 OK'
-        headers = [
-            ('Content-Type', 'application/json'),
-            ('X-Checkpoint', '9')
-        ]
-
-        log("✅ CHECKPOINT 9: Preparing response")
-
-        # Start response
+        headers = [('Content-Type', 'application/json')]
         start_response(status, headers)
 
-        log("✅ CHECKPOINT 10: start_response() called")
-
-        # Response body (must be bytes)
-        response_data = {
-            'status': 'ok',
-            'checkpoint': 10,
-            'message': 'WSGI with imports working!',
-            'method': method,
-            'path': path
-        }
-
-        response_body = json.dumps(response_data).encode('utf-8')
-
-        log("✅ CHECKPOINT 11: Response ready, returning")
-
-        # WSGI spec: return iterable of bytes
+        response_body = json.dumps({'ok': True}).encode('utf-8')
         return [response_body]
 
     except Exception as e:
         log(f"❌ ERROR in WSGI app: {e}")
+        logger.error(f"Error in webhook handler: {e}", exc_info=True)
 
         # Error response
         status = '500 Internal Server Error'
@@ -127,7 +341,7 @@ def application(environ, start_response):
 
         error_body = json.dumps({
             'error': str(e),
-            'checkpoint': 'failed'
+            'ok': False
         }).encode('utf-8')
 
         return [error_body]
@@ -136,7 +350,7 @@ def application(environ, start_response):
 # Vercel looks for 'app' or 'application' in WSGI mode
 app = application
 
-log("✅ CHECKPOINT 12: Module fully loaded, 'app' and 'application' defined")
+log("✅ CHECKPOINT 16: Module fully loaded, bot ready to receive webhooks")
 
 
 # ================================================
@@ -144,27 +358,8 @@ log("✅ CHECKPOINT 12: Module fully loaded, 'app' and 'application' defined")
 # ================================================
 if __name__ == '__main__':
     log("🧪 Running in local test mode")
-
-    # Test the WSGI app directly
-    class MockWSGI:
-        def __init__(self):
-            self.status = None
-            self.headers = None
-
-        def start_response(self, status, headers):
-            self.status = status
-            self.headers = headers
-
-    # Test request
-    mock = MockWSGI()
-    environ = {
-        'REQUEST_METHOD': 'GET',
-        'PATH_INFO': '/test'
-    }
-
-    result = application(environ, mock.start_response)
-
-    print(f"\nTest result:")
-    print(f"Status: {mock.status}")
-    print(f"Headers: {mock.headers}")
-    print(f"Body: {b''.join(result).decode('utf-8')}")
+    print("\n" + "="*60)
+    print("Bot is ready!")
+    print("="*60)
+    print(f"Handlers registered: {len(bot_application.handlers)}")
+    print("="*60 + "\n")

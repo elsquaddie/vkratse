@@ -1,18 +1,17 @@
 """
-DIAGNOSTIC VERSION - Step 1: Minimal Vercel Handler
-Проверяем базовую работоспособность Vercel
+DIAGNOSTIC VERSION - Step 2: Pure WSGI (NO Werkzeug)
+Проверяем работу без внешних зависимостей
 """
 
 import sys
-import traceback
+import json
 from datetime import datetime
 
 
 def log(message):
-    """Print log with timestamp"""
+    """Print log with timestamp to stderr"""
     timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     print(f"[{timestamp}] {message}", file=sys.stderr, flush=True)
-    return message
 
 
 # ================================================
@@ -21,129 +20,105 @@ def log(message):
 log("✅ CHECKPOINT 1: Module api/index.py loaded successfully")
 
 
-def handler(request):
+# ================================================
+# Pure WSGI Application (NO external dependencies)
+# ================================================
+def application(environ, start_response):
     """
-    Minimal Vercel handler for diagnostics
-    Returns OK on any request
+    Pure WSGI application - Vercel Python runtime calls this
+
+    This is the absolute minimum WSGI app possible:
+    - No Werkzeug
+    - No Flask
+    - Just pure WSGI spec
     """
     try:
-        log("✅ CHECKPOINT 2: Handler function called")
+        log("✅ CHECKPOINT 2: WSGI application() called")
 
-        # Get request method
-        method = getattr(request, 'method', 'UNKNOWN')
-        log(f"✅ CHECKPOINT 3: Request method = {method}")
+        # Get request info from WSGI environ
+        method = environ.get('REQUEST_METHOD', 'UNKNOWN')
+        path = environ.get('PATH_INFO', 'UNKNOWN')
 
-        # Get request path
-        path = getattr(request, 'path', 'UNKNOWN')
-        log(f"✅ CHECKPOINT 4: Request path = {path}")
+        log(f"✅ CHECKPOINT 3: Request = {method} {path}")
 
-        # Try to read request body
-        try:
-            if hasattr(request, 'get_json'):
-                body = request.get_json(force=True, silent=True)
-                log(f"✅ CHECKPOINT 5: Request body parsed (Flask): {type(body)}")
-            elif hasattr(request, 'json'):
-                body = request.json
-                log(f"✅ CHECKPOINT 5: Request body parsed (Vercel): {type(body)}")
-            else:
-                body_raw = request.body if hasattr(request, 'body') else request.data
-                log(f"✅ CHECKPOINT 5: Request body raw: {type(body_raw)}")
-                body = None
-        except Exception as e:
-            log(f"⚠️ CHECKPOINT 5: Could not parse body: {e}")
-            body = None
+        # Prepare response
+        status = '200 OK'
+        headers = [
+            ('Content-Type', 'application/json'),
+            ('X-Checkpoint', '4')
+        ]
 
-        log("✅ CHECKPOINT 6: All checks passed, returning 200 OK")
+        log("✅ CHECKPOINT 4: Preparing response")
 
-        # Return success
-        return {
-            'statusCode': 200,
-            'headers': {
-                'Content-Type': 'application/json'
-            },
-            'body': '{"status": "ok", "checkpoint": 6, "message": "Vercel handler working!"}'
+        # Start response
+        start_response(status, headers)
+
+        log("✅ CHECKPOINT 5: start_response() called")
+
+        # Response body (must be bytes)
+        response_data = {
+            'status': 'ok',
+            'checkpoint': 5,
+            'message': 'Pure WSGI working!',
+            'method': method,
+            'path': path
         }
+
+        response_body = json.dumps(response_data).encode('utf-8')
+
+        log("✅ CHECKPOINT 6: Response ready, returning")
+
+        # WSGI spec: return iterable of bytes
+        return [response_body]
 
     except Exception as e:
-        error_msg = f"❌ ERROR: {str(e)}"
-        error_trace = traceback.format_exc()
-        log(error_msg)
-        log(error_trace)
+        log(f"❌ ERROR in WSGI app: {e}")
 
-        return {
-            'statusCode': 500,
-            'headers': {
-                'Content-Type': 'application/json'
-            },
-            'body': f'{{"error": "{str(e)}", "checkpoint": "failed"}}'
-        }
+        # Error response
+        status = '500 Internal Server Error'
+        headers = [('Content-Type', 'application/json')]
+        start_response(status, headers)
+
+        error_body = json.dumps({
+            'error': str(e),
+            'checkpoint': 'failed'
+        }).encode('utf-8')
+
+        return [error_body]
+
+
+# Vercel looks for 'app' or 'application' in WSGI mode
+app = application
+
+log("✅ CHECKPOINT 7: Module fully loaded, 'app' and 'application' defined")
 
 
 # ================================================
-# WSGI Application for Vercel
+# Local testing with minimal Flask
 # ================================================
-def app(environ, start_response):
-    """WSGI app for Vercel Python runtime"""
-    try:
-        log("✅ CHECKPOINT 7: WSGI app() called")
-
-        # Import Werkzeug
-        from werkzeug.wrappers import Request, Response
-        log("✅ CHECKPOINT 8: Werkzeug imported")
-
-        # Create request object
-        request = Request(environ)
-        log(f"✅ CHECKPOINT 9: Request object created: {request.method} {request.path}")
-
-        # Call handler
-        result = handler(request)
-        log("✅ CHECKPOINT 10: Handler returned result")
-
-        # Create response
-        response = Response(
-            result.get('body', '{}'),
-            status=result.get('statusCode', 200),
-            headers=result.get('headers', {'Content-Type': 'application/json'})
-        )
-        log("✅ CHECKPOINT 11: Response object created")
-
-        return response(environ, start_response)
-
-    except Exception as e:
-        error_msg = f"❌ WSGI ERROR: {str(e)}"
-        error_trace = traceback.format_exc()
-        log(error_msg)
-        log(error_trace)
-
-        # Return error response
-        error_response = Response(
-            f'{{"error": "{str(e)}", "wsgi": true}}',
-            status=500,
-            content_type='application/json'
-        )
-        return error_response(environ, start_response)
-
-
-log("✅ CHECKPOINT 12: Module fully loaded and ready")
-
-
-# For local testing
 if __name__ == '__main__':
     log("🧪 Running in local test mode")
 
-    from flask import Flask, request as flask_request
+    # Test the WSGI app directly
+    class MockWSGI:
+        def __init__(self):
+            self.status = None
+            self.headers = None
 
-    flask_app = Flask(__name__)
+        def start_response(self, status, headers):
+            self.status = status
+            self.headers = headers
 
-    @flask_app.route('/', methods=['GET', 'POST'])
-    def test_handler():
-        log("Flask test route called")
-        return handler(flask_request)
+    # Test request
+    mock = MockWSGI()
+    environ = {
+        'REQUEST_METHOD': 'GET',
+        'PATH_INFO': '/test'
+    }
 
-    @flask_app.route('/health', methods=['GET'])
-    def health():
-        log("Health check called")
-        return {'status': 'ok', 'mode': 'local_test'}
+    result = application(environ, mock.start_response)
 
-    log("Starting Flask test server on port 8000...")
-    flask_app.run(host='0.0.0.0', port=8000, debug=True)
+    print(f"\nTest result:")
+    print(f"Status: {mock.status}")
+    print(f"Headers: {mock.headers}")
+    print(f"Body: {b''.join(result).decode('utf-8')}")

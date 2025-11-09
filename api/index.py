@@ -98,6 +98,7 @@ log("✅ CHECKPOINT 6: All imports completed")
 
 # Global bot application (will be set if initialization succeeds)
 bot_application = None
+bot_app_initialized = False  # Track if Application.initialize() was called
 
 # ================================================
 # CHECKPOINT 7: Initialize bot application
@@ -269,11 +270,20 @@ else:
 # ================================================
 async def process_update(update_data: dict):
     """Process a single update from Telegram"""
+    global bot_app_initialized
+
     if not bot_initialized:
         log("⚠️ Cannot process update: bot not initialized")
         return
 
     try:
+        # Initialize Application on first use (lazy initialization)
+        if not bot_app_initialized:
+            log("⚠️ Initializing bot application (first request)...")
+            await bot_application.initialize()
+            bot_app_initialized = True
+            log("✅ Bot application initialized successfully")
+
         log(f"✅ CHECKPOINT 9: Processing update {update_data.get('update_id', 'unknown')}")
         update = Update.de_json(update_data, bot_application.bot)
         await bot_application.process_update(update)

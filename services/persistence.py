@@ -34,16 +34,21 @@ class SupabasePersistence(BasePersistence):
     async def get_conversations(self, name: str) -> ConversationDict:
         """Load conversation states from database"""
         try:
+            logger.info(f"🔥 PERSISTENCE: Loading conversations for '{name}'")
             response = self.db.client.table('conversation_states')\
                 .select('user_id, state')\
                 .eq('conversation_name', name)\
                 .execute()
+
+            logger.info(f"🔥 PERSISTENCE: Got {len(response.data)} rows from DB")
 
             # Convert to ConversationDict format: {(chat_id, user_id): state}
             conversations = {}
             for row in response.data:
                 user_id = row['user_id']
                 state = row.get('state')
+
+                logger.info(f"🔥 PERSISTENCE: Row: user_id={user_id}, state={state} (type: {type(state)})")
 
                 if state:
                     # ConversationHandler expects (chat_id, user_id) as key
@@ -52,10 +57,11 @@ class SupabasePersistence(BasePersistence):
                     try:
                         state_int = int(state)
                         conversations[(user_id, user_id)] = state_int
+                        logger.info(f"🔥 PERSISTENCE: Added conversation key ({user_id}, {user_id}) -> state {state_int}")
                     except (ValueError, TypeError):
                         logger.warning(f"Invalid state '{state}' for user {user_id}, skipping")
 
-            logger.debug(f"Loaded {len(conversations)} conversation states for '{name}'")
+            logger.info(f"🔥 PERSISTENCE: Final conversations dict: {conversations}")
             return conversations
 
         except Exception as e:
@@ -73,6 +79,8 @@ class SupabasePersistence(BasePersistence):
             # key is (chat_id, user_id) for group chats or (user_id, user_id) for DMs
             user_id = key[-1]  # Last element is always user_id
 
+            logger.info(f"🔥 PERSISTENCE: update_conversation called: name={name}, key={key}, new_state={new_state}")
+
             if new_state is None:
                 # Delete conversation
                 self.db.client.table('conversation_states')\
@@ -81,7 +89,7 @@ class SupabasePersistence(BasePersistence):
                     .eq('conversation_name', name)\
                     .execute()
 
-                logger.debug(f"Deleted conversation state for user {user_id}, conversation '{name}'")
+                logger.info(f"🔥 PERSISTENCE: Deleted conversation state for user {user_id}, conversation '{name}'")
             else:
                 # Upsert conversation state
                 self.db.client.table('conversation_states')\
@@ -93,7 +101,7 @@ class SupabasePersistence(BasePersistence):
                     })\
                     .execute()
 
-                logger.debug(f"Saved conversation state for user {user_id}, conversation '{name}', state: {new_state}")
+                logger.info(f"🔥 PERSISTENCE: Saved conversation state for user {user_id}, conversation '{name}', state: {new_state}")
 
             # Cleanup old conversations (older than 24 hours)
             threshold = datetime.now(timezone.utc) - timedelta(hours=24)

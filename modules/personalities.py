@@ -171,6 +171,8 @@ async def personality_callback(update: Update, context: ContextTypes.DEFAULT_TYP
 
 async def receive_personality_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Receive personality name (step 1)"""
+    logger.info("🔥🔥🔥 receive_personality_name CALLED!")
+
     user = update.effective_user
     name = update.message.text.strip().lower()
 

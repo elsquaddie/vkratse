@@ -74,9 +74,9 @@ def is_valid_personality_name(name: str) -> Tuple[bool, str]:
     Returns:
         Tuple of (is_valid, error_message)
     """
-    # Must be alphanumeric (or cyrillic) and underscores
-    if not re.match(r'^[a-zA-Zа-яА-Я0-9_]+$', name):
-        return False, "Имя может содержать только буквы, цифры и подчёркивания"
+    # Must be alphanumeric (or cyrillic), underscores, and spaces
+    if not re.match(r'^[a-zA-Zа-яА-Я0-9_ ]+$', name):
+        return False, "Имя может содержать только буквы, цифры, пробелы и подчёркивания"
 
     # Length limits
     if len(name) < 3:

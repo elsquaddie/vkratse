@@ -80,10 +80,17 @@ async def personality_command(update: Update, context: ContextTypes.DEFAULT_TYPE
             if p.name == current_personality_name:
                 button_text += " ✓"
 
-            keyboard.append([InlineKeyboardButton(
-                button_text,
-                callback_data=f"pers:select:{p.name}"
-            )])
+            # Row with select button and delete button
+            keyboard.append([
+                InlineKeyboardButton(
+                    button_text,
+                    callback_data=f"pers:select:{p.name}"
+                ),
+                InlineKeyboardButton(
+                    "🗑️",
+                    callback_data=f"pers:delete:{p.name}"
+                )
+            ])
 
     # Create button
     keyboard.append([InlineKeyboardButton(
@@ -109,6 +116,7 @@ async def personality_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     Callback data formats:
     - pers:select:{name} - select personality
     - pers:create_start - start creation dialog
+    - pers:delete:{name} - delete custom personality
     - pers:noop - do nothing (section header)
     """
     query = update.callback_query
@@ -161,6 +169,38 @@ async def personality_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         )
         return AWAITING_NAME
 
+    # Handle delete
+    elif action == "delete":
+        if len(parts) < 3:
+            return ConversationHandler.END
+
+        personality_name = parts[2]
+
+        # Get personality info before deleting
+        personality = db.get_personality(personality_name)
+        if not personality:
+            await query.answer("❌ Личность не найдена", show_alert=True)
+            return ConversationHandler.END
+
+        # Attempt to delete
+        success = db.delete_personality(personality_name, user.id)
+
+        if success:
+            # If user had this personality selected, switch to default
+            current_personality = db.get_user_personality(user.id)
+            if current_personality == personality_name:
+                db.update_user_personality(user.id, config.DEFAULT_PERSONALITY, user.username)
+
+            await query.message.edit_text(
+                f"✅ Личность \"{personality.display_name}\" удалена.\n\n"
+                f"Используй /{config.COMMAND_PERSONALITY} чтобы выбрать другую."
+            )
+            logger.info(f"User {user.id} deleted custom personality '{personality_name}'")
+        else:
+            await query.answer("❌ Не удалось удалить личность", show_alert=True)
+
+        return ConversationHandler.END
+
     # No-op (section header)
     elif action == "noop":
         return ConversationHandler.END
@@ -194,6 +234,16 @@ async def receive_personality_name(update: Update, context: ContextTypes.DEFAULT
             "Попробуй другое название или /cancel для отмены."
         )
         return AWAITING_NAME
+
+    # Check if user has reached the limit of custom personalities
+    current_count = db.count_user_custom_personalities(user.id)
+    if current_count >= config.MAX_CUSTOM_PERSONALITIES_PER_USER:
+        await update.message.reply_text(
+            f"❌ Достигнут лимит кастомных личностей ({config.MAX_CUSTOM_PERSONALITIES_PER_USER}).\n\n"
+            f"Удали одну из существующих личностей через /{config.COMMAND_PERSONALITY}, "
+            f"чтобы создать новую."
+        )
+        return ConversationHandler.END
 
     # Save name in context
     context.user_data['personality_name'] = name

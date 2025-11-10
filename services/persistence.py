@@ -126,17 +126,23 @@ class SupabasePersistence(BasePersistence):
         try:
             response = self.db.client.table('conversation_states')\
                 .select('user_id, data')\
+                .eq('conversation_name', 'user_data')\
                 .execute()
 
             user_data = {}
             for row in response.data:
-                user_id = row['user_id']
+                user_id_str = row['user_id']
                 data = row.get('data', {})
 
                 if isinstance(data, str):
                     data = json.loads(data)
 
-                user_data[user_id] = data or {}
+                # Convert string user_id back to int for user_data dict
+                try:
+                    user_id_int = int(user_id_str)
+                    user_data[user_id_int] = data or {}
+                except ValueError:
+                    logger.warning(f"Invalid user_id format in user_data: {user_id_str}")
 
             logger.debug(f"Loaded user_data for {len(user_data)} users")
             return user_data
@@ -148,11 +154,11 @@ class SupabasePersistence(BasePersistence):
     async def update_user_data(self, user_id: int, data: Dict) -> None:
         """Save user_data to database"""
         try:
-            # Update data field for existing conversation
-            # or create new record if doesn't exist
+            # Store user_data with string user_id (not composite key)
+            # Use conversation_name='user_data' to distinguish from conversation states
             self.db.client.table('conversation_states')\
                 .upsert({
-                    'user_id': user_id,
+                    'user_id': str(user_id),  # Convert int to string for VARCHAR column
                     'conversation_name': 'user_data',  # Special conversation for user_data
                     'data': json.dumps(data),
                     'updated_at': datetime.now(timezone.utc).isoformat()
@@ -197,7 +203,8 @@ class SupabasePersistence(BasePersistence):
         try:
             self.db.client.table('conversation_states')\
                 .delete()\
-                .eq('user_id', user_id)\
+                .eq('user_id', str(user_id))\
+                .eq('conversation_name', 'user_data')\
                 .execute()
 
             logger.debug(f"Dropped user_data for user {user_id}")

@@ -45,21 +45,26 @@ class SupabasePersistence(BasePersistence):
             # Convert to ConversationDict format: {(chat_id, user_id): state}
             conversations = {}
             for row in response.data:
-                user_id = row['user_id']
+                # user_id is stored as "chat_id:user_id" composite key
+                composite_key = row['user_id']
                 state = row.get('state')
 
-                logger.info(f"🔥 PERSISTENCE: Row: user_id={user_id}, state={state} (type: {type(state)})")
+                logger.info(f"🔥 PERSISTENCE: Row: composite_key={composite_key}, state={state} (type: {type(state)})")
 
-                if state:
-                    # ConversationHandler expects (chat_id, user_id) as key
-                    # For DMs chat_id == user_id
-                    # Convert state from string to int
-                    try:
-                        state_int = int(state)
-                        conversations[(user_id, user_id)] = state_int
-                        logger.info(f"🔥 PERSISTENCE: Added conversation key ({user_id}, {user_id}) -> state {state_int}")
-                    except (ValueError, TypeError):
-                        logger.warning(f"Invalid state '{state}' for user {user_id}, skipping")
+                if state and ':' in str(composite_key):
+                    # Parse composite key: "chat_id:user_id"
+                    parts = str(composite_key).split(':')
+                    if len(parts) == 2:
+                        try:
+                            chat_id = int(parts[0])
+                            user_id = int(parts[1])
+                            state_int = int(state)
+                            conversations[(chat_id, user_id)] = state_int
+                            logger.info(f"🔥 PERSISTENCE: Added conversation key ({chat_id}, {user_id}) -> state {state_int}")
+                        except (ValueError, TypeError) as e:
+                            logger.warning(f"Invalid composite key or state '{composite_key}' / '{state}': {e}")
+                    else:
+                        logger.warning(f"Invalid composite key format '{composite_key}', expected 'chat_id:user_id'")
 
             logger.info(f"🔥 PERSISTENCE: Final conversations dict: {conversations}")
             return conversations
@@ -77,31 +82,34 @@ class SupabasePersistence(BasePersistence):
         """Save conversation state to database"""
         try:
             # key is (chat_id, user_id) for group chats or (user_id, user_id) for DMs
+            # Store as composite key "chat_id:user_id"
+            chat_id = key[0] if len(key) >= 1 else 0
             user_id = key[-1]  # Last element is always user_id
+            composite_key = f"{chat_id}:{user_id}"
 
-            logger.info(f"🔥 PERSISTENCE: update_conversation called: name={name}, key={key}, new_state={new_state}")
+            logger.info(f"🔥 PERSISTENCE: update_conversation called: name={name}, key={key}, composite_key={composite_key}, new_state={new_state}")
 
             if new_state is None:
                 # Delete conversation
                 self.db.client.table('conversation_states')\
                     .delete()\
-                    .eq('user_id', user_id)\
+                    .eq('user_id', composite_key)\
                     .eq('conversation_name', name)\
                     .execute()
 
-                logger.info(f"🔥 PERSISTENCE: Deleted conversation state for user {user_id}, conversation '{name}'")
+                logger.info(f"🔥 PERSISTENCE: Deleted conversation state for composite_key {composite_key}, conversation '{name}'")
             else:
-                # Upsert conversation state
+                # Upsert conversation state (use composite key as user_id)
                 self.db.client.table('conversation_states')\
                     .upsert({
-                        'user_id': user_id,
+                        'user_id': composite_key,
                         'conversation_name': name,
                         'state': str(new_state),
                         'updated_at': datetime.now(timezone.utc).isoformat()
                     })\
                     .execute()
 
-                logger.info(f"🔥 PERSISTENCE: Saved conversation state for user {user_id}, conversation '{name}', state: {new_state}")
+                logger.info(f"🔥 PERSISTENCE: Saved conversation state for composite_key {composite_key}, conversation '{name}', state: {new_state}")
 
             # Cleanup old conversations (older than 24 hours)
             threshold = datetime.now(timezone.utc) - timedelta(hours=24)

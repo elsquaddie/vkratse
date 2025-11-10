@@ -152,12 +152,11 @@ async def personality_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         await query.message.reply_text(
             "🎭 Создание своей личности\n\n"
             "Шаг 1 из 2\n\n"
-            "Как назовём личность?\n"
-            "(одним словом, на русском или английском)\n\n"
+            "Как назовём личность?\n\n"
             "💡 Примеры:\n"
-            "• пират\n"
-            "• самурай\n"
-            "• хиппи\n\n"
+            "• Пират\n"
+            "• Мастер по ноготочкам\n"
+            "• Космический ковбой\n\n"
             "Напиши название или /cancel для отмены."
         )
         return AWAITING_NAME
@@ -198,21 +197,23 @@ async def receive_personality_name(update: Update, context: ContextTypes.DEFAULT
 
     # Save name in context
     context.user_data['personality_name'] = name
+    context.user_data['personality_emoji'] = '🎭'  # Default emoji
 
-    # Ask for emoji
+    # Ask for description (skip emoji step)
     await update.message.reply_text(
         f"🎭 Создание личности \"{name}\"\n\n"
-        f"Шаг 2 из 3\n\n"
-        f"Выбери emoji для своей личности.\n"
-        f"(один символ)\n\n"
-        f"💡 Примеры:\n"
-        f"• 🏴‍☠️ (пират)\n"
-        f"• ⚔️ (самурай)\n"
-        f"• 🌻 (хиппи)\n\n"
-        f"Отправь emoji или /cancel для отмены."
+        f"Шаг 2 из 2\n\n"
+        f"Опиши стиль общения этой личности.\n"
+        f"(от {config.MIN_PERSONALITY_DESCRIPTION_LENGTH} до "
+        f"{config.MAX_PERSONALITY_DESCRIPTION_LENGTH} символов)\n\n"
+        f"💡 Пример:\n"
+        f"Говорит как мастер маникюра, использует профессиональный жаргон "
+        f"про формы ногтей, покрытия и дизайн. Дает советы по уходу за ногтями. "
+        f"Дружелюбная и внимательная к деталям.\n\n"
+        f"Напиши описание или /cancel для отмены."
     )
 
-    return AWAITING_EMOJI
+    return AWAITING_DESCRIPTION
 
 
 async def receive_personality_emoji(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:

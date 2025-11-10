@@ -84,11 +84,9 @@ try:
         personality_command,
         personality_callback,
         receive_personality_name,
-        receive_personality_emoji,
         receive_personality_description,
         cancel_personality_creation,
         AWAITING_NAME,
-        AWAITING_EMOJI,
         AWAITING_DESCRIPTION
     )
     modules_imported = True
@@ -237,9 +235,7 @@ def create_bot_application():
             AWAITING_NAME: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, receive_personality_name)
             ],
-            AWAITING_EMOJI: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, receive_personality_emoji)
-            ],
+            # AWAITING_EMOJI step removed - using default emoji 🎭
             AWAITING_DESCRIPTION: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, receive_personality_description)
             ]

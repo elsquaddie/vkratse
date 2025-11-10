@@ -192,6 +192,59 @@ class DBService:
             logger.error(f"Error checking personality existence: {e}")
             return False
 
+    def count_user_custom_personalities(self, user_id: int) -> int:
+        """Count how many custom personalities a user has created"""
+        try:
+            response = self.client.table('personalities')\
+                .select('id', count='exact')\
+                .eq('is_custom', True)\
+                .eq('created_by_user_id', user_id)\
+                .execute()
+
+            return response.count or 0
+        except Exception as e:
+            logger.error(f"Error counting user personalities: {e}")
+            return 0
+
+    def delete_personality(self, name: str, user_id: int) -> bool:
+        """
+        Delete a custom personality (only if created by this user)
+        Returns True if deleted, False otherwise
+        """
+        try:
+            # First verify it's a custom personality created by this user
+            response = self.client.table('personalities')\
+                .select('id, is_custom, created_by_user_id')\
+                .eq('name', name)\
+                .single()\
+                .execute()
+
+            if not response.data:
+                logger.warning(f"Personality '{name}' not found")
+                return False
+
+            personality = response.data
+            if not personality['is_custom']:
+                logger.warning(f"Cannot delete base personality '{name}'")
+                return False
+
+            if personality['created_by_user_id'] != user_id:
+                logger.warning(f"User {user_id} cannot delete personality '{name}' created by another user")
+                return False
+
+            # Delete the personality
+            self.client.table('personalities')\
+                .delete()\
+                .eq('name', name)\
+                .execute()
+
+            logger.info(f"User {user_id} deleted custom personality '{name}'")
+            return True
+
+        except Exception as e:
+            logger.error(f"Error deleting personality: {e}")
+            return False
+
     # ================================================
     # USER SETTINGS
     # ================================================

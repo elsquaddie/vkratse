@@ -215,7 +215,8 @@ async def receive_personality_name(update: Update, context: ContextTypes.DEFAULT
     user = update.effective_user
     name = update.message.text.strip().lower()
 
-    logger.info(f"User {user.id} proposed personality name: {name}")
+    logger.info(f"🔥 User {user.id} proposed personality name: {name}")
+    logger.info(f"🔥 Current user_data before: {context.user_data}")
 
     # Validate name
     is_valid, error_msg = is_valid_personality_name(name)
@@ -248,6 +249,9 @@ async def receive_personality_name(update: Update, context: ContextTypes.DEFAULT
     # Save name in context
     context.user_data['personality_name'] = name
     context.user_data['personality_emoji'] = '🎭'  # Default emoji
+
+    logger.info(f"🔥 Saved to user_data: personality_name={name}, emoji=🎭")
+    logger.info(f"🔥 Current user_data after save: {context.user_data}")
 
     # Ask for description (skip emoji step)
     await update.message.reply_text(
@@ -308,12 +312,22 @@ async def receive_personality_emoji(update: Update, context: ContextTypes.DEFAUL
 
 async def receive_personality_description(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Receive personality description (step 3)"""
+    logger.info("🔥🔥🔥 receive_personality_description CALLED!")
+
     user = update.effective_user
     description = update.message.text.strip()
+
+    logger.info(f"🔥 User {user.id} sent description: {description[:50]}...")
+    logger.info(f"🔥 Current user_data: {context.user_data}")
+    logger.info(f"🔥 user_data keys: {list(context.user_data.keys())}")
+
     name = context.user_data.get('personality_name')
     emoji = context.user_data.get('personality_emoji', '🎭')
 
+    logger.info(f"🔥 Retrieved from user_data: name={name}, emoji={emoji}")
+
     if not name:
+        logger.error(f"🔥 ERROR: personality_name is None! user_data={context.user_data}")
         await update.message.reply_text("❌ Ошибка: имя личности не найдено. Начни заново с /личность")
         return ConversationHandler.END
 

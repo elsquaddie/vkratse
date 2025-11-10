@@ -124,15 +124,20 @@ class SupabasePersistence(BasePersistence):
     async def get_user_data(self) -> Dict[int, Dict]:
         """Load user_data from database"""
         try:
+            logger.info("🔥 PERSISTENCE: get_user_data() called")
             response = self.db.client.table('conversation_states')\
                 .select('user_id, data')\
                 .eq('conversation_name', 'user_data')\
                 .execute()
 
+            logger.info(f"🔥 PERSISTENCE: Found {len(response.data)} user_data rows")
+
             user_data = {}
             for row in response.data:
                 user_id_str = row['user_id']
                 data = row.get('data', {})
+
+                logger.info(f"🔥 PERSISTENCE: Row user_id={user_id_str}, data={data}")
 
                 if isinstance(data, str):
                     data = json.loads(data)
@@ -141,10 +146,11 @@ class SupabasePersistence(BasePersistence):
                 try:
                     user_id_int = int(user_id_str)
                     user_data[user_id_int] = data or {}
+                    logger.info(f"🔥 PERSISTENCE: Added user_data[{user_id_int}] = {data}")
                 except ValueError:
                     logger.warning(f"Invalid user_id format in user_data: {user_id_str}")
 
-            logger.debug(f"Loaded user_data for {len(user_data)} users")
+            logger.info(f"🔥 PERSISTENCE: Final user_data dict: {user_data}")
             return user_data
 
         except Exception as e:

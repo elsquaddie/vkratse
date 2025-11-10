@@ -18,7 +18,7 @@ TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
 # AI CONFIGURATION (Anthropic Claude)
 # ================================================
 ANTHROPIC_API_KEY = os.getenv('ANTHROPIC_API_KEY')
-ANTHROPIC_MODEL = os.getenv('ANTHROPIC_MODEL', 'claude-sonnet-4-5-20250929')
+ANTHROPIC_MODEL = os.getenv('ANTHROPIC_MODEL', 'claude-3-7-sonnet-20250219')
 
 # ================================================
 # DATABASE CONFIGURATION (Supabase)

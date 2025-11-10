@@ -67,7 +67,7 @@ except Exception as e:
 # CHECKPOINT 4: Import services
 # ================================================
 try:
-    from services import DBService
+    from services import DBService, SupabasePersistence
     services_imported = True
     log("✅ CHECKPOINT 4: services import successful")
 except Exception as e:
@@ -199,11 +199,18 @@ def create_bot_application():
     Create and configure a new bot Application instance
 
     FIX: Creating new Application per request to avoid event loop issues in serverless
+    FIX: Added persistence for ConversationHandler in serverless environment
     """
     if not bot_initialized or not modules_imported:
         raise RuntimeError("Cannot create bot application - imports failed")
 
-    app = Application.builder().token(config.TELEGRAM_BOT_TOKEN).build()
+    # Create persistence for ConversationHandler
+    persistence = SupabasePersistence()
+
+    app = Application.builder()\
+        .token(config.TELEGRAM_BOT_TOKEN)\
+        .persistence(persistence)\
+        .build()
 
     # Basic commands
     app.add_handler(CommandHandler("start", start_command))
@@ -241,7 +248,7 @@ def create_bot_application():
             CommandHandler("cancel", cancel_personality_creation)
         ],
         name="personality_conversation",
-        persistent=False
+        persistent=True  # FIX: Enable persistence for serverless environment
     )
     app.add_handler(personality_conv)
 

@@ -45,12 +45,16 @@ class DBService:
 
             # 2. Auto-cleanup: delete messages older than MESSAGE_RETENTION_DAYS
             time_threshold = datetime.now(timezone.utc) - timedelta(days=config.MESSAGE_RETENTION_DAYS)
-            self.client.table('messages').delete()\
+            delete_response = self.client.table('messages').delete()\
                 .eq('chat_id', chat_id)\
                 .lt('created_at', time_threshold.isoformat())\
                 .execute()
 
-            logger.debug(f"Saved message from {username} in chat {chat_id}, cleaned old messages")
+            deleted_count = len(delete_response.data) if delete_response.data else 0
+            if deleted_count > 0:
+                logger.info(f"Auto-deleted {deleted_count} old messages from chat {chat_id} (older than {config.MESSAGE_RETENTION_DAYS} days)")
+
+            logger.debug(f"Saved message from {username} in chat {chat_id}")
         except Exception as e:
             logger.error(f"Error saving message: {e}")
 

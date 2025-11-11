@@ -35,8 +35,8 @@ SECRET_KEY = os.getenv('SECRET_KEY', 'default_secret_CHANGE_ME_in_production')
 # BOT SETTINGS
 # ================================================
 
-# Message retention
-MESSAGE_RETENTION_DAYS = int(os.getenv('MESSAGE_RETENTION_DAYS', 7))
+# Message retention (days) - auto-delete messages older than this
+MESSAGE_RETENTION_DAYS = int(os.getenv('MESSAGE_RETENTION_DAYS', 2))
 
 # Default summary period (in hours)
 DEFAULT_SUMMARY_HOURS = int(os.getenv('DEFAULT_SUMMARY_HOURS', 24))

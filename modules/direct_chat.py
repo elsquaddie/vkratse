@@ -34,16 +34,25 @@ async def show_personality_selection(
     """
     try:
         user_id = update.effective_user.id
+        logger.info(f"🔍 [PERSONALITY_SELECT] Starting personality selection for user {user_id}")
 
         # Get all personalities (base + user's custom)
+        logger.info(f"🔍 [PERSONALITY_SELECT] Fetching all personalities from DB...")
         all_personalities = db_service.get_all_personalities()
+        logger.info(f"🔍 [PERSONALITY_SELECT] Got {len(all_personalities)} personalities from DB")
 
         # Separate base and custom personalities
         base_personalities = [p for p in all_personalities if not p.is_custom]
         custom_personalities = [p for p in all_personalities if p.is_custom and p.created_by_user_id == user_id]
+        logger.info(f"🔍 [PERSONALITY_SELECT] Base: {len(base_personalities)}, Custom: {len(custom_personalities)}")
+
+        # Log each personality for debugging
+        for p in base_personalities:
+            logger.info(f"🔍 [PERSONALITY_SELECT] Base personality: name={p.name}, emoji={repr(p.emoji)}, display_name={p.display_name}")
 
         # Build inline keyboard (2 columns layout)
         keyboard = []
+        logger.info(f"🔍 [PERSONALITY_SELECT] Building keyboard...")
 
         # Add base personalities in rows of 2
         for i in range(0, len(base_personalities), 2):
@@ -51,12 +60,15 @@ async def show_personality_selection(
             for j in range(2):
                 if i + j < len(base_personalities):
                     p = base_personalities[i + j]
+                    logger.info(f"🔍 [PERSONALITY_SELECT] Adding button for {p.name}: emoji={repr(p.emoji)}")
                     callback_data = sign_callback_data(f"select_personality:{p.name}")
                     row.append(InlineKeyboardButton(
                         f"{p.emoji} {p.display_name}",
                         callback_data=callback_data
                     ))
             keyboard.append(row)
+
+        logger.info(f"🔍 [PERSONALITY_SELECT] Keyboard built with {len(keyboard)} rows")
 
         # Add custom personalities
         if custom_personalities:
@@ -95,6 +107,7 @@ async def show_personality_selection(
 
 Каждая личность имеет свой уникальный стиль и подход к разговору."""
 
+        logger.info(f"🔍 [PERSONALITY_SELECT] Sending message to user...")
         if edit_message and update.callback_query:
             await update.callback_query.edit_message_text(
                 text=text,
@@ -106,10 +119,12 @@ async def show_personality_selection(
                 reply_markup=reply_markup
             )
 
-        logger.info(f"Showed personality selection to user {user_id}")
+        logger.info(f"✅ [PERSONALITY_SELECT] Successfully showed personality selection to user {user_id}")
 
     except Exception as e:
-        logger.error(f"Error showing personality selection: {e}")
+        logger.error(f"❌ [PERSONALITY_SELECT] Error showing personality selection: {e}")
+        logger.error(f"❌ [PERSONALITY_SELECT] Error type: {type(e).__name__}")
+        logger.error(f"❌ [PERSONALITY_SELECT] Error traceback:", exc_info=True)
         await update.effective_message.reply_text(
             "❌ Ошибка при загрузке личностей. Попробуй /start"
         )

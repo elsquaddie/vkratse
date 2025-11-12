@@ -142,16 +142,26 @@ class DBService:
     def get_all_personalities(self, include_inactive: bool = False) -> List[Personality]:
         """Get all personalities"""
         try:
+            logger.info(f"🔍 [DB] Fetching personalities (include_inactive={include_inactive})")
             query = self.client.table('personalities').select('*')
 
             if not include_inactive:
                 query = query.eq('is_active', True)
 
             response = query.order('id').execute()
+            logger.info(f"🔍 [DB] Got {len(response.data)} rows from personalities table")
 
-            return [Personality.from_dict(p) for p in response.data]
+            # Log raw data for debugging
+            for idx, p in enumerate(response.data):
+                logger.info(f"🔍 [DB] Personality {idx}: {p}")
+
+            personalities = [Personality.from_dict(p) for p in response.data]
+            logger.info(f"✅ [DB] Successfully parsed {len(personalities)} personalities")
+            return personalities
         except Exception as e:
-            logger.error(f"Error getting personalities: {e}")
+            logger.error(f"❌ [DB] Error getting personalities: {e}")
+            logger.error(f"❌ [DB] Error type: {type(e).__name__}")
+            logger.error(f"❌ [DB] Error traceback:", exc_info=True)
             return []
 
     def create_personality(

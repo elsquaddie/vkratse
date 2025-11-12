@@ -13,15 +13,20 @@ from datetime import datetime
 
 
 def log(message):
-    """Print log with timestamp to stderr"""
+    """Print log with timestamp to stderr (errors and warnings only)"""
     timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     print(f"[{timestamp}] {message}", file=sys.stderr, flush=True)
 
 
-# ================================================
-# CHECKPOINT 1: Module loaded
-# ================================================
-log("✅ CHECKPOINT 1: Module api/index.py loaded successfully")
+def verbose_log(message):
+    """Print verbose log only if VERBOSE_LOGGING is enabled"""
+    # Will be set after config import
+    if hasattr(verbose_log, 'enabled') and verbose_log.enabled:
+        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        print(f"[{timestamp}] {message}", file=sys.stderr, flush=True)
+
+# Default: disabled
+verbose_log.enabled = False
 
 # Import success flags
 telegram_imported = False
@@ -45,7 +50,7 @@ try:
     )
     from telegram.constants import ChatType
     telegram_imported = True
-    log("✅ CHECKPOINT 2: telegram imports successful")
+    verbose_log("✅ CHECKPOINT 2: telegram imports successful")
 except Exception as e:
     log(f"❌ CHECKPOINT 2 FAILED: telegram import error: {e}")
 
@@ -56,7 +61,9 @@ try:
     import config
     from config import logger
     config_imported = True
-    log("✅ CHECKPOINT 3: config import successful")
+    # Enable verbose logging if configured
+    verbose_log.enabled = config.VERBOSE_LOGGING
+    verbose_log("✅ CHECKPOINT 3: config import successful")
 except Exception as e:
     log(f"❌ CHECKPOINT 3 FAILED: config import error: {e}")
     # Create dummy logger for diagnostics
@@ -69,7 +76,7 @@ except Exception as e:
 try:
     from services import DBService, SupabasePersistence
     services_imported = True
-    log("✅ CHECKPOINT 4: services import successful")
+    verbose_log("✅ CHECKPOINT 4: services import successful")
 except Exception as e:
     log(f"❌ CHECKPOINT 4 FAILED: services import error: {e}")
 
@@ -99,16 +106,16 @@ try:
         handle_create_personality_callback
     )
     modules_imported = True
-    log("✅ CHECKPOINT 5: modules import successful")
+    verbose_log("✅ CHECKPOINT 5: modules import successful")
 except Exception as e:
     log(f"❌ CHECKPOINT 5 FAILED: modules import error: {e}")
 
-log("✅ CHECKPOINT 6: All imports completed")
+verbose_log("✅ CHECKPOINT 6: All imports completed")
 
 # Check if we can initialize bot
 bot_initialized = telegram_imported and config_imported
 if bot_initialized:
-    log("✅ CHECKPOINT 7: Bot can be initialized (will create Application per request)")
+    verbose_log("✅ CHECKPOINT 7: Bot can be initialized (will create Application per request)")
 else:
     log("⚠️ CHECKPOINT 7: Required imports missing, bot cannot be initialized")
 
@@ -297,11 +304,11 @@ def create_bot_application():
         handle_bot_removed_from_chat
     ))
 
-    log("✅ CHECKPOINT 8: Created new bot Application with all handlers")
+    verbose_log("✅ CHECKPOINT 8: Created new bot Application with all handlers")
     return app
 
 if bot_initialized and modules_imported:
-    log("✅ Bot application factory ready")
+    verbose_log("✅ Bot application factory ready")
 else:
     log("⚠️ Bot application cannot be created - imports failed")
 
@@ -321,20 +328,20 @@ async def process_update(update_data: dict):
 
     app = None
     try:
-        log(f"✅ CHECKPOINT 9: Processing update {update_data.get('update_id', 'unknown')}")
+        verbose_log(f"✅ CHECKPOINT 9: Processing update {update_data.get('update_id', 'unknown')}")
 
         # Create new Application for this request
         app = create_bot_application()
 
         # Initialize it
         await app.initialize()
-        log("✅ Application initialized for this request")
+        verbose_log("✅ Application initialized for this request")
 
         # Process the update
         update = Update.de_json(update_data, app.bot)
         await app.process_update(update)
 
-        log(f"✅ CHECKPOINT 10: Update processed successfully")
+        verbose_log(f"✅ CHECKPOINT 10: Update processed successfully")
     except Exception as e:
         logger.error(f"Error processing update: {e}", exc_info=True)
         log(f"❌ CHECKPOINT 10 FAILED: Update processing error: {e}")
@@ -343,7 +350,7 @@ async def process_update(update_data: dict):
         if app:
             try:
                 await app.shutdown()
-                log("✅ Application shutdown complete")
+                verbose_log("✅ Application shutdown complete")
             except Exception as e:
                 log(f"⚠️ Error during app shutdown: {e}")
 
@@ -358,13 +365,13 @@ def application(environ, start_response):
     FIX: Using pure WSGI instead of Werkzeug
     """
     try:
-        log("✅ CHECKPOINT 11: WSGI application() called")
+        verbose_log("✅ CHECKPOINT 11: WSGI application() called")
 
         # Get request info from WSGI environ
         method = environ.get('REQUEST_METHOD', 'UNKNOWN')
         path = environ.get('PATH_INFO', 'UNKNOWN')
 
-        log(f"✅ CHECKPOINT 12: Request = {method} {path}")
+        verbose_log(f"✅ CHECKPOINT 12: Request = {method} {path}")
 
         # Only accept POST requests for webhook
         if method != 'POST':
@@ -409,7 +416,7 @@ def application(environ, start_response):
         if content_length > 0:
             request_body = environ['wsgi.input'].read(content_length)
             update_data = json.loads(request_body.decode('utf-8'))
-            log(f"✅ CHECKPOINT 13: Parsed webhook data, update_id={update_data.get('update_id', 'unknown')}")
+            verbose_log(f"✅ CHECKPOINT 13: Parsed webhook data, update_id={update_data.get('update_id', 'unknown')}")
         else:
             log("⚠️ Empty request body")
             status = '400 Bad Request'
@@ -418,7 +425,7 @@ def application(environ, start_response):
             return [json.dumps({'error': 'Empty request body'}).encode('utf-8')]
 
         # Process update asynchronously
-        log("✅ CHECKPOINT 14: Running async update processing")
+        verbose_log("✅ CHECKPOINT 14: Running async update processing")
 
         # FIX: Use get_event_loop() or create new one for serverless
         try:
@@ -438,7 +445,7 @@ def application(environ, start_response):
         if pending:
             loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
 
-        log("✅ CHECKPOINT 15: Webhook processed successfully")
+        verbose_log("✅ CHECKPOINT 15: Webhook processed successfully")
 
         # Return success
         status = '200 OK'
@@ -468,7 +475,7 @@ def application(environ, start_response):
 # Vercel looks for 'app' or 'application' in WSGI mode
 app = application
 
-log(f"✅ CHECKPOINT 16: Module fully loaded (bot_initialized={bot_initialized})")
+verbose_log(f"✅ CHECKPOINT 16: Module fully loaded (bot_initialized={bot_initialized})")
 
 
 # ================================================

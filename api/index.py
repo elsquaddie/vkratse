@@ -266,13 +266,13 @@ def create_bot_application():
     # Handle personality selection callbacks
     app.add_handler(CallbackQueryHandler(
         handle_personality_selection,
-        pattern="^select_personality:"
+        pattern="^sel_pers:"
     ))
 
     # Handle create personality callback
     app.add_handler(CallbackQueryHandler(
         handle_create_personality_callback,
-        pattern="^create_personality:"
+        pattern="^create_personality"
     ))
 
     # Handle direct messages in private chats (must be after ConversationHandler)

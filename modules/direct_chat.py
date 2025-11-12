@@ -60,7 +60,7 @@ async def show_personality_selection(
 
         # Add custom personalities
         if custom_personalities:
-            keyboard.append([InlineKeyboardButton("--- Твои личности ---", callback_data="ignore")])
+            # No separator button - just add custom personalities directly
             for i in range(0, len(custom_personalities), 2):
                 row = []
                 for j in range(2):
@@ -81,7 +81,17 @@ async def show_personality_selection(
 
         reply_markup = InlineKeyboardMarkup(keyboard)
 
-        text = """🎭 Выбери личность для общения:
+        # Build text based on available personalities
+        if custom_personalities:
+            text = """🎭 Выбери личность для общения:
+
+**Базовые личности:**
+(первые {} варианта)
+
+**Твои личности:**
+(следующие {} варианта)""".format(len(base_personalities), len(custom_personalities))
+        else:
+            text = """🎭 Выбери личность для общения:
 
 Каждая личность имеет свой уникальный стиль и подход к разговору."""
 

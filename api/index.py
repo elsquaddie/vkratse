@@ -79,7 +79,6 @@ except Exception as e:
 try:
     from modules.commands import (
         start_command,
-        help_command,
         stats_command,
         handle_start_menu_callback
     )
@@ -222,7 +221,6 @@ def create_bot_application():
 
     # Basic commands
     app.add_handler(CommandHandler("start", start_command))
-    app.add_handler(CommandHandler(config.COMMAND_HELP, help_command))
     app.add_handler(CommandHandler("stats", stats_command))
 
     # Summary command

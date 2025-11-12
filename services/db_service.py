@@ -139,6 +139,23 @@ class DBService:
             logger.error(f"Error getting personality '{name}': {e}")
             return None
 
+    def get_personality_by_id(self, personality_id: int) -> Optional[Personality]:
+        """Get personality by ID"""
+        try:
+            response = self.client.table('personalities')\
+                .select('*')\
+                .eq('id', personality_id)\
+                .eq('is_active', True)\
+                .single()\
+                .execute()
+
+            if response.data:
+                return Personality.from_dict(response.data)
+            return None
+        except Exception as e:
+            logger.error(f"Error getting personality with ID {personality_id}: {e}")
+            return None
+
     def get_all_personalities(self, include_inactive: bool = False) -> List[Personality]:
         """Get all personalities"""
         try:

@@ -60,8 +60,8 @@ async def show_personality_selection(
             for j in range(2):
                 if i + j < len(base_personalities):
                     p = base_personalities[i + j]
-                    logger.info(f"🔍 [PERSONALITY_SELECT] Adding button for {p.name}: emoji={repr(p.emoji)}")
-                    callback_data = sign_callback_data(f"select_personality:{p.name}")
+                    logger.info(f"🔍 [PERSONALITY_SELECT] Adding button for {p.name} (ID: {p.id}): emoji={repr(p.emoji)}")
+                    callback_data = sign_callback_data(f"sel_pers:{p.id}")
                     row.append(InlineKeyboardButton(
                         f"{p.emoji} {p.display_name}",
                         callback_data=callback_data
@@ -78,7 +78,7 @@ async def show_personality_selection(
                 for j in range(2):
                     if i + j < len(custom_personalities):
                         p = custom_personalities[i + j]
-                        callback_data = sign_callback_data(f"select_personality:{p.name}")
+                        callback_data = sign_callback_data(f"sel_pers:{p.id}")
                         row.append(InlineKeyboardButton(
                             f"{p.emoji} {p.display_name}",
                             callback_data=callback_data
@@ -151,21 +151,25 @@ async def handle_personality_selection(
             await query.edit_message_text("❌ Неверная подпись данных. Попробуй /start")
             return
 
-        # Extract callback data
-        callback_data = query.data.split(":")[0] + ":" + query.data.split(":")[1]  # Remove HMAC
-        _, personality_name = callback_data.rsplit(":", 1)
+        # Extract callback data (format: "sel_pers:ID:HMAC")
+        parts = query.data.split(":")
+        if len(parts) < 2:
+            await query.edit_message_text("❌ Неверный формат данных. Попробуй /start")
+            return
+
+        personality_id = int(parts[1])  # Extract ID
 
         user_id = update.effective_user.id
         username = update.effective_user.username
 
-        # Get personality from DB
-        personality = db_service.get_personality(personality_name)
+        # Get personality from DB by ID
+        personality = db_service.get_personality_by_id(personality_id)
         if not personality:
             await query.edit_message_text("❌ Личность не найдена. Попробуй /start")
             return
 
         # Save user's personality choice
-        db_service.update_user_personality(user_id, personality_name, username)
+        db_service.update_user_personality(user_id, personality.name, username)
 
         # Get or generate greeting
         greeting = personality.greeting_message
@@ -183,10 +187,10 @@ async def handle_personality_selection(
             user_id=user_id,
             chat_id=update.effective_chat.id,
             event_type="personality_selected",
-            metadata={"personality": personality_name}
+            metadata={"personality": personality.name}
         )
 
-        logger.info(f"User {user_id} selected personality '{personality_name}'")
+        logger.info(f"User {user_id} selected personality '{personality.name}'")
 
     except Exception as e:
         logger.error(f"Error handling personality selection: {e}")

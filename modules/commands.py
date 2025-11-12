@@ -3,42 +3,124 @@ Basic bot commands
 /start and /help
 """
 
-from telegram import Update
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
+from telegram.constants import ChatType
 import config
 from config import logger
+from utils.security import sign_callback_data
 
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     Handle /start command
-    Show welcome message and basic instructions
+    Show welcome message with inline menu for action selection
     """
     user = update.effective_user
-    logger.info(f"User {user.id} ({user.username}) started the bot")
+    chat_type = update.effective_chat.type
+    logger.info(f"User {user.id} ({user.username}) started the bot in {chat_type}")
 
-    welcome_text = f"""👋 Привет, {user.first_name}!
+    # Different behavior for private vs group chats
+    if chat_type == ChatType.PRIVATE:
+        # Private chat: show full welcome with inline menu
+        welcome_text = f"""👋 Привет, {user.first_name}!
 
-Я — бот для саммаризации чатов с AI.
+Я бот с множественными личностями.
 
-🎯 Что умею:
-• /{config.COMMAND_SUMMARY} — саммари чата (дефолт: 24 часа)
-• /{config.COMMAND_SUMMARY} 6ч — саммари за 6 часов
-• /{config.COMMAND_SUMMARY} 30м — саммари за 30 минут
-• /{config.COMMAND_SUMMARY} сегодня — с начала дня
-• /{config.COMMAND_JUDGE} <текст> — рассудить спор
-• /{config.COMMAND_PERSONALITY} — выбрать стиль AI
+Я могу:
+• Общаться с тобой в разных стилях
+• Саммаризировать групповые чаты
+• Рассуживать споры
 
-💡 Как использовать:
-1. Добавь меня в группу
-2. Напиши /{config.COMMAND_SUMMARY} в группе
-3. Или напиши мне в ЛС и выбери чат
+Что будем делать?"""
 
-По умолчанию: нейтральный стиль 🎓
+        # Build inline keyboard
+        keyboard = [
+            [InlineKeyboardButton("💬 Общаться напрямую", callback_data=sign_callback_data("direct_chat"))],
+            [InlineKeyboardButton("👥 Добавить в групповой чат", callback_data=sign_callback_data("add_to_group"))],
+            [InlineKeyboardButton("🎭 Настроить личность", callback_data=sign_callback_data("setup_personality"))]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
+        await update.message.reply_text(welcome_text, reply_markup=reply_markup)
+
+    else:
+        # Group chat: show brief help message
+        group_text = f"""👋 Привет!
+
+Я бот для саммаризации чатов и общения в разных стилях.
+
+🎯 Основные команды:
+• /{config.COMMAND_SUMMARY} — саммари чата
+• /{config.COMMAND_JUDGE} — рассудить спор
+• /{config.COMMAND_PERSONALITY} — выбрать личность
 
 /{config.COMMAND_HELP} — полная справка"""
 
-    await update.message.reply_text(welcome_text)
+        await update.message.reply_text(group_text)
+
+
+async def handle_start_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Handle callbacks from /start menu buttons
+
+    Callbacks:
+    - direct_chat: Show personality selection
+    - add_to_group: Show instructions for adding bot to group
+    - setup_personality: Redirect to /lichnost
+    """
+    from utils.security import verify_callback_data
+    from modules import direct_chat
+
+    query = update.callback_query
+    await query.answer()
+
+    try:
+        # Verify HMAC signature
+        if not verify_callback_data(query.data):
+            await query.edit_message_text("❌ Неверная подпись данных. Попробуй /start")
+            return
+
+        # Extract action (remove HMAC part)
+        action = query.data.split(":")[0]
+
+        if action == "direct_chat":
+            # Show personality selection menu
+            await direct_chat.show_personality_selection(update, context, edit_message=True)
+
+        elif action == "add_to_group":
+            # Show group addition instructions (will be implemented in Phase 3 - onboarding module)
+            text = """🎉 Добавь меня в свою группу!
+
+Я смогу:
+✅ Саммаризировать обсуждения
+✅ Рассуживать споры
+✅ Общаться в разных стилях
+
+💡 Чтобы добавить:
+1. Нажми на моё имя вверху
+2. Выбери "Add to Group"
+3. Выбери нужную группу
+
+После добавления используй команды:
+• /summary — саммари обсуждений
+• /rassudi — рассудить спор
+• /help — полная справка"""
+
+            await query.edit_message_text(text)
+
+        elif action == "setup_personality":
+            # Redirect to personality selection (same as direct_chat for now)
+            await direct_chat.show_personality_selection(update, context, edit_message=True)
+
+        else:
+            await query.edit_message_text("❌ Неизвестное действие. Попробуй /start")
+
+        logger.info(f"Handled start menu callback: {action} from user {update.effective_user.id}")
+
+    except Exception as e:
+        logger.error(f"Error handling start menu callback: {e}")
+        await query.edit_message_text("❌ Ошибка. Попробуй /start")
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

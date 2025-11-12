@@ -60,6 +60,10 @@ MAX_PERSONALITY_DESCRIPTION_LENGTH = int(os.getenv('MAX_PERSONALITY_DESCRIPTION_
 MIN_PERSONALITY_DESCRIPTION_LENGTH = int(os.getenv('MIN_PERSONALITY_DESCRIPTION_LENGTH', 10))
 MAX_CUSTOM_PERSONALITIES_PER_USER = int(os.getenv('MAX_CUSTOM_PERSONALITIES_PER_USER', 5))
 
+# Direct chat settings (Phase 2)
+DIRECT_CHAT_CONTEXT_MESSAGES = int(os.getenv('DIRECT_CHAT_CONTEXT_MESSAGES', 30))  # Number of messages in context
+DIRECT_CHAT_SESSION_TIMEOUT = int(os.getenv('DIRECT_CHAT_SESSION_TIMEOUT', 900))  # 15 minutes in seconds
+
 # ================================================
 # COMMAND NAMES (Latin characters - Telegram API requirement)
 # ================================================

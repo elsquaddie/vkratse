@@ -162,6 +162,111 @@ class AIService:
             logger.error(f"Error generating verdict: {e}")
             return f"❌ Ошибка при генерации вердикта: {str(e)}"
 
+    def generate_chat_response(
+        self,
+        user_message: str,
+        personality: Personality,
+        history: Optional[List[Message]] = None
+    ) -> str:
+        """
+        Generate a conversational response in the context of chat history.
+
+        Args:
+            user_message: The current message from the user
+            personality: AI personality to use
+            history: Optional list of previous messages for context
+
+        Returns:
+            Response text
+        """
+        try:
+            # Build conversation context
+            messages_for_api = []
+
+            # Add system prompt through the first user message
+            system_context = f"{personality.system_prompt}\n\n"
+
+            if history and len(history) > 0:
+                # Add history context
+                system_context += "История диалога:\n"
+                system_context += self._format_messages(history) + "\n\n"
+
+            system_context += f"Текущее сообщение пользователя: {user_message}\n\n"
+            system_context += """Требования к ответу:
+1. Отвечай естественно, в стиле своей личности
+2. Учитывай контекст предыдущих сообщений
+3. Будь полезным и интересным собеседником
+4. НЕ ИСПОЛЬЗУЙ markdown форматирование (**, *, #)! Используй только простой текст и эмодзи
+5. Ответ должен быть коротким и по делу (1-3 предложения обычно)
+
+Твой ответ:"""
+
+            messages_for_api.append({
+                "role": "user",
+                "content": system_context
+            })
+
+            # Call Claude API
+            response = self.client.messages.create(
+                model=self.model,
+                max_tokens=512,  # Shorter responses for chat
+                messages=messages_for_api
+            )
+
+            reply = response.content[0].text.strip()
+            logger.info(f"Generated chat response using personality '{personality.name}'")
+            return reply
+
+        except Exception as e:
+            logger.error(f"Error generating chat response: {e}")
+            return f"❌ Ошибка при генерации ответа: {str(e)}"
+
+    def generate_greeting(
+        self,
+        personality: Personality
+    ) -> str:
+        """
+        Generate a personalized greeting for a personality.
+        Used for custom personalities that don't have pre-written greetings.
+
+        Args:
+            personality: AI personality to generate greeting for
+
+        Returns:
+            Greeting text
+        """
+        try:
+            prompt = f"""
+{personality.system_prompt}
+
+Твоя задача: придумать короткое приветствие (1-2 предложения), которое ты будешь говорить пользователю при первом знакомстве.
+
+Требования:
+1. Приветствие должно отражать твою личность и стиль общения
+2. Будь дружелюбным и интригующим
+3. НЕ ИСПОЛЬЗУЙ markdown форматирование (**, *, #)! Используй только простой текст и эмодзи
+4. Приветствие должно быть коротким (1-2 предложения)
+5. Можешь добавить подходящий эмодзи в конце
+
+Твоё приветствие:"""
+
+            response = self.client.messages.create(
+                model=self.model,
+                max_tokens=256,
+                messages=[
+                    {"role": "user", "content": prompt}
+                ]
+            )
+
+            greeting = response.content[0].text.strip()
+            logger.info(f"Generated greeting for personality '{personality.name}'")
+            return greeting
+
+        except Exception as e:
+            logger.error(f"Error generating greeting: {e}")
+            # Fallback greeting
+            return f"Привет! Я {personality.display_name}. Чем могу помочь?"
+
     def _format_messages(self, messages: List[Message]) -> str:
         """
         Format messages for AI prompt

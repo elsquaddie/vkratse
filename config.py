@@ -111,6 +111,10 @@ import logging
 
 LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
 
+# Verbose logging (checkpoint logs) - disabled in production
+# Set to 'true' in environment to enable detailed checkpoint logging
+VERBOSE_LOGGING = os.getenv('VERBOSE_LOGGING', 'false').lower() == 'true'
+
 def setup_logging():
     """Setup logging configuration"""
     logging.basicConfig(

@@ -97,10 +97,10 @@ async def show_personality_selection(
         if custom_personalities:
             text = """🎭 Выбери личность для общения:
 
-**Базовые личности:**
+📚 БАЗОВЫЕ ЛИЧНОСТИ:
 (первые {} варианта)
 
-**Твои личности:**
+✨ ТВОИ ЛИЧНОСТИ:
 (следующие {} варианта)""".format(len(base_personalities), len(custom_personalities))
         else:
             text = """🎭 Выбери личность для общения:
@@ -178,7 +178,7 @@ async def handle_personality_selection(
             greeting = ai_service.generate_greeting(personality)
 
         # Send greeting
-        greeting_text = f"✨ Выбрана личность: **{personality.display_name}** {personality.emoji}\n\n{greeting}\n\n💬 Теперь можешь писать мне - я буду отвечать в этом стиле!"
+        greeting_text = f"✨ Выбрана личность: {personality.display_name} {personality.emoji}\n\n{greeting}\n\n💬 Теперь можешь писать мне - я буду отвечать в этом стиле!"
 
         await query.edit_message_text(greeting_text)
 

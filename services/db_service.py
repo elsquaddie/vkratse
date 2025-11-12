@@ -374,3 +374,202 @@ class DBService:
         except Exception as e:
             logger.error(f"Error getting user stats: {e}")
             return {}
+
+    # ================================================
+    # CHAT HISTORY (for direct chat context)
+    # ================================================
+
+    def get_chat_history(
+        self,
+        chat_id: int,
+        user_id: Optional[int] = None,
+        limit: int = 30
+    ) -> List[Message]:
+        """
+        Get recent chat history for context in direct conversations.
+        If user_id is provided, only gets messages between that user and the bot.
+
+        Args:
+            chat_id: The chat ID
+            user_id: Optional user ID to filter conversation with bot
+            limit: Maximum number of messages to retrieve (default 30)
+
+        Returns:
+            List of Message objects in chronological order
+        """
+        try:
+            query = self.client.table('messages')\
+                .select('*')\
+                .eq('chat_id', chat_id)
+
+            # If user_id provided, filter for messages from user or bot (user_id=None)
+            if user_id:
+                query = query.or_(f'user_id.eq.{user_id},user_id.is.null')
+
+            response = query.order('created_at', desc=True).limit(limit).execute()
+
+            messages = [Message.from_dict(msg) for msg in response.data]
+            # Reverse to get chronological order (oldest first)
+            messages.reverse()
+
+            logger.debug(f"Retrieved {len(messages)} messages for chat history (chat: {chat_id}, user: {user_id})")
+            return messages
+        except Exception as e:
+            logger.error(f"Error getting chat history: {e}")
+            return []
+
+    # ================================================
+    # ACTIVE CHAT SESSIONS (for /chat in groups)
+    # ================================================
+
+    def create_chat_session(
+        self,
+        user_id: int,
+        chat_id: int,
+        personality: str
+    ) -> bool:
+        """
+        Create a new active chat session for a user in a group.
+
+        Args:
+            user_id: Telegram user ID
+            chat_id: Telegram chat ID
+            personality: Personality name to use in this session
+
+        Returns:
+            True if created successfully, False otherwise
+        """
+        try:
+            self.client.table('active_chat_sessions').upsert({
+                'user_id': user_id,
+                'chat_id': chat_id,
+                'personality': personality,
+                'started_at': datetime.now(timezone.utc).isoformat(),
+                'last_activity': datetime.now(timezone.utc).isoformat()
+            }).execute()
+
+            logger.info(f"Created chat session for user {user_id} in chat {chat_id} with personality '{personality}'")
+            return True
+        except Exception as e:
+            logger.error(f"Error creating chat session: {e}")
+            return False
+
+    def get_active_session(
+        self,
+        user_id: int,
+        chat_id: int
+    ) -> Optional[dict]:
+        """
+        Get active chat session for a user in a chat.
+
+        Args:
+            user_id: Telegram user ID
+            chat_id: Telegram chat ID
+
+        Returns:
+            Session dict with personality and timestamps, or None if no active session
+        """
+        try:
+            response = self.client.table('active_chat_sessions')\
+                .select('*')\
+                .eq('user_id', user_id)\
+                .eq('chat_id', chat_id)\
+                .single()\
+                .execute()
+
+            if response.data:
+                logger.debug(f"Found active session for user {user_id} in chat {chat_id}")
+                return response.data
+            return None
+        except Exception:
+            # No session found (single() raises exception if no data)
+            return None
+
+    def update_session_activity(
+        self,
+        user_id: int,
+        chat_id: int
+    ) -> bool:
+        """
+        Update the last_activity timestamp for a session.
+
+        Args:
+            user_id: Telegram user ID
+            chat_id: Telegram chat ID
+
+        Returns:
+            True if updated, False otherwise
+        """
+        try:
+            response = self.client.table('active_chat_sessions')\
+                .update({'last_activity': datetime.now(timezone.utc).isoformat()})\
+                .eq('user_id', user_id)\
+                .eq('chat_id', chat_id)\
+                .execute()
+
+            updated = len(response.data) > 0 if response.data else False
+            if updated:
+                logger.debug(f"Updated session activity for user {user_id} in chat {chat_id}")
+            return updated
+        except Exception as e:
+            logger.error(f"Error updating session activity: {e}")
+            return False
+
+    def end_chat_session(
+        self,
+        user_id: int,
+        chat_id: int
+    ) -> bool:
+        """
+        End (delete) a chat session.
+
+        Args:
+            user_id: Telegram user ID
+            chat_id: Telegram chat ID
+
+        Returns:
+            True if ended successfully, False otherwise
+        """
+        try:
+            response = self.client.table('active_chat_sessions')\
+                .delete()\
+                .eq('user_id', user_id)\
+                .eq('chat_id', chat_id)\
+                .execute()
+
+            deleted = len(response.data) > 0 if response.data else False
+            if deleted:
+                logger.info(f"Ended chat session for user {user_id} in chat {chat_id}")
+            return deleted
+        except Exception as e:
+            logger.error(f"Error ending chat session: {e}")
+            return False
+
+    def cleanup_inactive_sessions(
+        self,
+        timeout_minutes: int = 15
+    ) -> int:
+        """
+        Clean up inactive chat sessions older than timeout.
+
+        Args:
+            timeout_minutes: Session timeout in minutes (default 15)
+
+        Returns:
+            Number of sessions cleaned up
+        """
+        try:
+            time_threshold = datetime.now(timezone.utc) - timedelta(minutes=timeout_minutes)
+
+            response = self.client.table('active_chat_sessions')\
+                .delete()\
+                .lt('last_activity', time_threshold.isoformat())\
+                .execute()
+
+            deleted_count = len(response.data) if response.data else 0
+            if deleted_count > 0:
+                logger.info(f"Cleaned up {deleted_count} inactive chat sessions (timeout: {timeout_minutes} min)")
+            return deleted_count
+        except Exception as e:
+            logger.error(f"Error cleaning up inactive sessions: {e}")
+            return 0

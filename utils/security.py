@@ -121,3 +121,61 @@ def sanitize_personality_prompt(text: str) -> str:
 
     logger.debug("Sanitized personality prompt")
     return safe_prompt
+
+
+def sign_callback_data(data: str) -> str:
+    """
+    Sign callback_data string with HMAC signature
+
+    Args:
+        data: Callback data string (e.g., "direct_chat" or "select_personality:bydlan")
+
+    Returns:
+        Signed callback data with HMAC appended (e.g., "direct_chat:SIGNATURE")
+    """
+    signature = hmac.new(
+        config.SECRET_KEY.encode(),
+        data.encode(),
+        hashlib.sha256
+    ).hexdigest()[:16]
+
+    return f"{data}:{signature}"
+
+
+def verify_callback_data(signed_data: str) -> bool:
+    """
+    Verify HMAC signature in callback_data
+
+    Args:
+        signed_data: Signed callback data string (e.g., "direct_chat:SIGNATURE")
+
+    Returns:
+        True if signature is valid, False otherwise
+    """
+    try:
+        # Split by last colon to separate data from signature
+        parts = signed_data.rsplit(":", 1)
+        if len(parts) != 2:
+            logger.warning(f"Invalid callback_data format: {signed_data}")
+            return False
+
+        data, received_signature = parts
+
+        # Calculate expected signature
+        expected_signature = hmac.new(
+            config.SECRET_KEY.encode(),
+            data.encode(),
+            hashlib.sha256
+        ).hexdigest()[:16]
+
+        # Compare signatures (constant-time comparison)
+        is_valid = hmac.compare_digest(expected_signature, received_signature)
+
+        if not is_valid:
+            logger.warning(f"Invalid HMAC signature for callback_data: {data}")
+
+        return is_valid
+
+    except Exception as e:
+        logger.error(f"Error verifying callback_data: {e}")
+        return False

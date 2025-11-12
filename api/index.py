@@ -77,7 +77,12 @@ except Exception as e:
 # CHECKPOINT 5: Import modules
 # ================================================
 try:
-    from modules.commands import start_command, help_command, stats_command
+    from modules.commands import (
+        start_command,
+        help_command,
+        stats_command,
+        handle_start_menu_callback
+    )
     from modules.summaries import summary_command, summary_callback
     from modules.judge import judge_command
     from modules.personalities import (
@@ -88,6 +93,11 @@ try:
         cancel_personality_creation,
         AWAITING_NAME,
         AWAITING_DESCRIPTION
+    )
+    from modules.direct_chat import (
+        handle_personality_selection,
+        handle_direct_message,
+        handle_create_personality_callback
     )
     modules_imported = True
     log("✅ CHECKPOINT 5: modules import successful")
@@ -248,9 +258,34 @@ def create_bot_application():
     )
     app.add_handler(personality_conv)
 
-    # Log all messages to database
+    # Direct chat handlers (Phase 2)
+    # Handle /start menu callbacks
+    app.add_handler(CallbackQueryHandler(
+        handle_start_menu_callback,
+        pattern="^(direct_chat|add_to_group|setup_personality):"
+    ))
+
+    # Handle personality selection callbacks
+    app.add_handler(CallbackQueryHandler(
+        handle_personality_selection,
+        pattern="^select_personality:"
+    ))
+
+    # Handle create personality callback
+    app.add_handler(CallbackQueryHandler(
+        handle_create_personality_callback,
+        pattern="^create_personality:"
+    ))
+
+    # Handle direct messages in private chats (must be after ConversationHandler)
     app.add_handler(MessageHandler(
-        filters.TEXT & ~filters.COMMAND,
+        filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE,
+        handle_direct_message
+    ))
+
+    # Log all messages to database (for groups)
+    app.add_handler(MessageHandler(
+        filters.TEXT & ~filters.COMMAND & filters.ChatType.GROUPS,
         log_message_to_db
     ))
 

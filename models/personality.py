@@ -21,6 +21,7 @@ class Personality:
     created_by_user_id: Optional[int]
     is_active: bool
     created_at: datetime
+    greeting_message: Optional[str] = None  # Added by migration 001_add_greetings.sql
 
     @classmethod
     def from_dict(cls, data: dict) -> 'Personality':
@@ -35,7 +36,8 @@ class Personality:
             created_by_user_id=data.get('created_by_user_id'),
             is_active=data.get('is_active', True),
             created_at=data['created_at'] if isinstance(data['created_at'], datetime)
-                      else datetime.fromisoformat(data['created_at'].replace('Z', '+00:00'))
+                      else datetime.fromisoformat(data['created_at'].replace('Z', '+00:00')),
+            greeting_message=data.get('greeting_message')
         )
 
     def to_dict(self) -> dict:
@@ -49,7 +51,8 @@ class Personality:
             'is_custom': self.is_custom,
             'created_by_user_id': self.created_by_user_id,
             'is_active': self.is_active,
-            'created_at': self.created_at.isoformat()
+            'created_at': self.created_at.isoformat(),
+            'greeting_message': self.greeting_message
         }
 
     def __str__(self) -> str:

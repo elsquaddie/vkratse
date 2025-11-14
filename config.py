@@ -67,11 +67,13 @@ DIRECT_CHAT_SESSION_TIMEOUT = int(os.getenv('DIRECT_CHAT_SESSION_TIMEOUT', 900))
 # ================================================
 # COMMAND NAMES (Latin characters - Telegram API requirement)
 # ================================================
-COMMAND_SUMMARY = 'sut'
+COMMAND_SUMMARY = 'summary'
+COMMAND_CHAT = 'chat'
 COMMAND_JUDGE = 'rassudi'
 COMMAND_PERSONALITY = 'lichnost'
 COMMAND_START = 'start'
 COMMAND_HELP = 'help'
+COMMAND_STOP = 'stop'
 
 # ================================================
 # VALIDATION

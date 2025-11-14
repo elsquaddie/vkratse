@@ -283,6 +283,65 @@ async def handle_direct_message(
         )
 
 
+async def chat_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Handle /chat command in group chats.
+    Shows personality selection menu for starting a chat session.
+
+    Args:
+        update: Telegram update object
+        context: Bot context
+    """
+    user = update.effective_user
+    chat = update.effective_chat
+
+    # Only work in groups
+    if chat.type == ChatType.PRIVATE:
+        await update.message.reply_text(
+            "💬 В личных сообщениях ты можешь сразу писать мне!\n\n"
+            "Просто выбери личность через /lichnost и начинай общаться."
+        )
+        return
+
+    # Check if user already has an active session
+    # TODO: Implement session management
+
+    # Show personality selection for group chat
+    await update.message.reply_text(
+        "🎭 Выбери личность для общения в этом чате:\n\n"
+        "(Функция в разработке - пока используй /summary)"
+    )
+
+    logger.info(f"User {user.id} requested /chat in group {chat.id}")
+
+
+async def stop_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Handle /stop command to end active chat session in groups.
+
+    Args:
+        update: Telegram update object
+        context: Bot context
+    """
+    user = update.effective_user
+    chat = update.effective_chat
+
+    # Only work in groups
+    if chat.type == ChatType.PRIVATE:
+        await update.message.reply_text(
+            "В личных сообщениях нет активных сессий для завершения."
+        )
+        return
+
+    # TODO: Implement session termination
+    await update.message.reply_text(
+        "✅ Сессия завершена.\n\n"
+        "(Функция в разработке)"
+    )
+
+    logger.info(f"User {user.id} ended chat session in group {chat.id}")
+
+
 async def handle_create_personality_callback(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE

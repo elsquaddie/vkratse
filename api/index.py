@@ -103,7 +103,9 @@ try:
     from modules.direct_chat import (
         handle_personality_selection,
         handle_direct_message,
-        handle_create_personality_callback
+        handle_create_personality_callback,
+        chat_command,
+        stop_command
     )
     modules_imported = True
     verbose_log("✅ CHECKPOINT 5: modules import successful")
@@ -236,6 +238,10 @@ def create_bot_application():
         summary_callback,
         pattern="^summary:"
     ))
+
+    # Chat commands (group chat sessions)
+    app.add_handler(CommandHandler(config.COMMAND_CHAT, chat_command))
+    app.add_handler(CommandHandler(config.COMMAND_STOP, stop_command))
 
     # Judge command
     app.add_handler(CommandHandler(config.COMMAND_JUDGE, judge_command))

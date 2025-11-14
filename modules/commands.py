@@ -127,7 +127,7 @@ async def handle_start_menu_callback(update: Update, context: ContextTypes.DEFAU
 async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     Handle /stats command
-    Show user statistics
+    Show user statistics including personality usage
     """
     from services import DBService
 
@@ -136,6 +136,8 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
     db = DBService()
     stats = db.get_user_stats(user.id)
+    personality_stats = db.get_personality_usage_stats(user.id)
+    current_personality = db.get_user_personality(user.id)
 
     if not stats:
         await update.message.reply_text(
@@ -152,8 +154,40 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     stats_text = f"""📊 Твоя статистика
 
 🔍 Саммари создано: {summary_count}
-⚖️ Споров рассужено: {judge_count}
+⚖️ Споров рассужено: {judge_count}"""
 
-Продолжай пользоваться ботом! 🚀"""
+    # Add personality information if available
+    if current_personality:
+        # Get personality display name and emoji
+        personality_obj = db.get_personality(current_personality)
+        if personality_obj:
+            stats_text += f"\n\n🎭 Текущая личность: {personality_obj.emoji} {personality_obj.display_name}"
+        else:
+            stats_text += f"\n\n🎭 Текущая личность: {current_personality}"
+
+    # Add favorite personality if available
+    favorite = personality_stats.get('favorite_personality')
+    if favorite:
+        favorite_count = personality_stats.get('favorite_count', 0)
+        favorite_obj = db.get_personality(favorite)
+        if favorite_obj:
+            stats_text += f"\n⭐ Любимая личность: {favorite_obj.emoji} {favorite_obj.display_name} ({favorite_count}x)"
+        else:
+            stats_text += f"\n⭐ Любимая личность: {favorite} ({favorite_count}x)"
+
+    # Add personality breakdown if there are multiple personalities used
+    personality_counts = personality_stats.get('personality_counts', {})
+    if len(personality_counts) > 1:
+        stats_text += "\n\n📈 Использование личностей:"
+        # Sort by usage count (descending)
+        sorted_personalities = sorted(personality_counts.items(), key=lambda x: x[1], reverse=True)
+        for pers_name, count in sorted_personalities[:5]:  # Show top 5
+            pers_obj = db.get_personality(pers_name)
+            if pers_obj:
+                stats_text += f"\n  {pers_obj.emoji} {pers_obj.display_name}: {count}"
+            else:
+                stats_text += f"\n  {pers_name}: {count}"
+
+    stats_text += "\n\nПродолжай пользоваться ботом! 🚀"
 
     await update.message.reply_text(stats_text)

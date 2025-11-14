@@ -402,6 +402,57 @@ class DBService:
             logger.error(f"Error getting user stats: {e}")
             return {}
 
+    def get_personality_usage_stats(self, user_id: int) -> dict:
+        """
+        Get personality usage statistics for a user.
+
+        Returns a dict with:
+        - personality_counts: dict of personality name -> usage count
+        - favorite_personality: most used personality name
+        - total_uses: total number of times personalities were used
+        """
+        try:
+            response = self.client.table('analytics')\
+                .select('metadata')\
+                .eq('user_id', user_id)\
+                .in_('event_type', ['summary', 'summary_dm', 'judge'])\
+                .execute()
+
+            # Count personality usage
+            personality_counts = {}
+            for event in response.data:
+                metadata = event.get('metadata', {})
+                personality = metadata.get('personality')
+                if personality:
+                    personality_counts[personality] = personality_counts.get(personality, 0) + 1
+
+            # Find favorite personality (most used)
+            favorite = None
+            max_count = 0
+            if personality_counts:
+                favorite = max(personality_counts.items(), key=lambda x: x[1])[0]
+                max_count = personality_counts[favorite]
+
+            total_uses = sum(personality_counts.values())
+
+            result = {
+                'personality_counts': personality_counts,
+                'favorite_personality': favorite,
+                'favorite_count': max_count,
+                'total_uses': total_uses
+            }
+
+            logger.debug(f"Retrieved personality stats for user {user_id}: {result}")
+            return result
+        except Exception as e:
+            logger.error(f"Error getting personality usage stats: {e}")
+            return {
+                'personality_counts': {},
+                'favorite_personality': None,
+                'favorite_count': 0,
+                'total_uses': 0
+            }
+
     # ================================================
     # CHAT HISTORY (for direct chat context)
     # ================================================

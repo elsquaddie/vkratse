@@ -14,46 +14,9 @@ from utils import (
     check_rate_limit,
     create_signature, verify_signature,
     validate_chat_access,
-    parse_time_argument, get_default_period
+    parse_time_argument, get_default_period,
+    build_personality_menu
 )
-
-
-def _build_personality_menu(personalities: list, user_id: int, chat_id: int, custom_limit: str = None) -> InlineKeyboardMarkup:
-    """
-    Build inline keyboard with personality selection.
-
-    Args:
-        personalities: List of Personality objects
-        user_id: User ID for HMAC signature
-        chat_id: Chat ID for callback data
-        custom_limit: Optional custom message limit (e.g., "123")
-
-    Returns:
-        InlineKeyboardMarkup with personality buttons (2 per row)
-    """
-    keyboard = []
-    row = []
-
-    for personality in personalities:
-        # Callback format: summary_personality:<chat_id>:<personality_id>:<custom_limit_or_none>:<signature>
-        limit_part = custom_limit if custom_limit else "none"
-        callback_base = f"{chat_id}:{personality.id}:{limit_part}"
-        signature = create_signature(callback_base, user_id)
-        callback_data = f"summary_personality:{callback_base}:{signature}"
-
-        button_text = f"{personality.emoji} {personality.display_name}"
-        row.append(InlineKeyboardButton(button_text, callback_data=callback_data))
-
-        # 2 buttons per row
-        if len(row) == 2:
-            keyboard.append(row)
-            row = []
-
-    # Add last row if odd number
-    if row:
-        keyboard.append(row)
-
-    return InlineKeyboardMarkup(keyboard)
 
 
 def _build_timeframe_menu(user_id: int, chat_id: int, personality_id: int) -> InlineKeyboardMarkup:
@@ -159,18 +122,18 @@ async def _summary_in_group(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             )
             return
 
-    # 4. Get personalities (base + user's custom)
-    personalities = db.get_user_personalities(user.id)
+    # 4. Get current personality for ✓ indicator
+    current_personality = db.get_user_personality(user.id)
 
-    if not personalities:
-        await update.message.reply_text(
-            "❌ Не найдено ни одной личности. Попробуй позже."
-        )
-        logger.error(f"No personalities found for user {user.id}")
-        return
-
-    # 5. Show personality selection menu
-    keyboard = _build_personality_menu(personalities, user.id, chat.id, custom_limit)
+    # 5. Show personality selection menu using universal builder
+    keyboard = build_personality_menu(
+        user_id=user.id,
+        callback_prefix="summary_personality",
+        context="select",
+        current_personality=current_personality,
+        extra_callback_data={"chat_id": chat.id, "limit": custom_limit or "none"},
+        show_create_button=False  # Don't show create button in summary context
+    )
 
     await update.message.reply_text(
         "🎭 Выбери личность для саммари:",

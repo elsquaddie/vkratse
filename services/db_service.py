@@ -303,6 +303,74 @@ class DBService:
             logger.error(f"Error deleting personality: {e}")
             return False
 
+    def update_personality(
+        self,
+        name: str,
+        user_id: int,
+        display_name: Optional[str] = None,
+        emoji: Optional[str] = None,
+        system_prompt: Optional[str] = None
+    ) -> bool:
+        """
+        Update a custom personality (only if created by this user)
+
+        Args:
+            name: Current personality name
+            user_id: User ID (must be creator)
+            display_name: New display name (optional)
+            emoji: New emoji (optional)
+            system_prompt: New system prompt (optional)
+
+        Returns:
+            True if updated, False otherwise
+        """
+        try:
+            # First verify it's a custom personality created by this user
+            response = self.client.table('personalities')\
+                .select('id, is_custom, created_by_user_id')\
+                .eq('name', name)\
+                .single()\
+                .execute()
+
+            if not response.data:
+                logger.warning(f"Personality '{name}' not found")
+                return False
+
+            personality = response.data
+            if not personality['is_custom']:
+                logger.warning(f"Cannot edit base personality '{name}'")
+                return False
+
+            if personality['created_by_user_id'] != user_id:
+                logger.warning(f"User {user_id} cannot edit personality '{name}' created by another user")
+                return False
+
+            # Build update dict with only provided fields
+            update_data = {}
+            if display_name is not None:
+                update_data['display_name'] = display_name
+            if emoji is not None:
+                update_data['emoji'] = emoji
+            if system_prompt is not None:
+                update_data['system_prompt'] = system_prompt
+
+            if not update_data:
+                logger.warning("No fields to update")
+                return False
+
+            # Update the personality
+            self.client.table('personalities')\
+                .update(update_data)\
+                .eq('name', name)\
+                .execute()
+
+            logger.info(f"User {user_id} updated custom personality '{name}': {list(update_data.keys())}")
+            return True
+
+        except Exception as e:
+            logger.error(f"Error updating personality: {e}")
+            return False
+
     # ================================================
     # USER SETTINGS
     # ================================================

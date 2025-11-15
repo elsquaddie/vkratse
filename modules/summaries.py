@@ -235,14 +235,14 @@ async def _summary_in_dm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 async def summary_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
-    Handle callback from chat selection buttons
+    Handle callback from chat selection buttons (in DM)
+    Shows personality selection menu after chat is chosen
 
     Callback data format: summary:{chat_id}:{signature}
     """
     query = update.callback_query
     user = query.from_user
     db = DBService()
-    ai = AIService()
 
     await query.answer()
 
@@ -273,41 +273,25 @@ async def summary_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         )
         return
 
-    # 4. Get messages (default period)
-    since, period_desc = get_default_period()
-    messages = db.get_messages(
-        chat_id=chat_id,
-        since=since,
-        limit=config.MAX_MESSAGES_PER_SUMMARY
-    )
+    # 4. Get personalities (base + user's custom)
+    personalities = db.get_user_personalities(user.id)
 
-    if not messages:
-        await query.message.reply_text(f"📭 Нет сообщений {period_desc}.")
+    if not personalities:
+        await query.message.reply_text(
+            "❌ Не найдено ни одной личности. Попробуй позже."
+        )
+        logger.error(f"No personalities found for user {user.id}")
         return
 
-    # 5. Get personality
-    personality_name = db.get_user_personality(user.id)
-    personality = db.get_personality(personality_name)
+    # 5. Show personality selection menu (no custom_limit for DM)
+    keyboard = _build_personality_menu(personalities, user.id, chat_id, custom_limit=None)
 
-    if not personality:
-        personality = db.get_personality(config.DEFAULT_PERSONALITY)
+    await query.message.edit_text(
+        "🎭 Выбери личность для саммари:",
+        reply_markup=keyboard
+    )
 
-    # 6. Generate summary
-    await query.message.reply_text("⏳ Генерирую саммари...")
-
-    summary = ai.generate_summary(messages, personality, period_desc)
-
-    # 7. Send summary in DM
-    await query.message.reply_text(f"📝 Саммари чата:\n\n{summary}")
-
-    # 8. Log event
-    db.log_event(user.id, chat_id, 'summary_dm', {
-        'period': period_desc,
-        'message_count': len(messages),
-        'personality': personality_name
-    })
-
-    logger.info(f"Generated DM summary for user {user.id}, chat {chat_id}")
+    logger.info(f"Showed personality menu to user {user.id} for chat {chat_id} (DM)")
 
 
 async def summary_personality_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

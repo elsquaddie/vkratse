@@ -18,6 +18,91 @@ from utils import (
 )
 
 
+def _build_personality_menu(personalities: list, user_id: int, chat_id: int, custom_limit: str = None) -> InlineKeyboardMarkup:
+    """
+    Build inline keyboard with personality selection.
+
+    Args:
+        personalities: List of Personality objects
+        user_id: User ID for HMAC signature
+        chat_id: Chat ID for callback data
+        custom_limit: Optional custom message limit (e.g., "123")
+
+    Returns:
+        InlineKeyboardMarkup with personality buttons (2 per row)
+    """
+    keyboard = []
+    row = []
+
+    for personality in personalities:
+        # Callback format: summary_personality:<chat_id>:<personality_id>:<custom_limit_or_none>:<signature>
+        limit_part = custom_limit if custom_limit else "none"
+        callback_base = f"{chat_id}:{personality.id}:{limit_part}"
+        signature = create_signature(callback_base, user_id)
+        callback_data = f"summary_personality:{callback_base}:{signature}"
+
+        button_text = f"{personality.emoji} {personality.display_name}"
+        row.append(InlineKeyboardButton(button_text, callback_data=callback_data))
+
+        # 2 buttons per row
+        if len(row) == 2:
+            keyboard.append(row)
+            row = []
+
+    # Add last row if odd number
+    if row:
+        keyboard.append(row)
+
+    return InlineKeyboardMarkup(keyboard)
+
+
+def _build_timeframe_menu(user_id: int, chat_id: int, personality_id: int) -> InlineKeyboardMarkup:
+    """
+    Build inline keyboard with timeframe selection.
+
+    Args:
+        user_id: User ID for HMAC signature
+        chat_id: Chat ID for callback data
+        personality_id: Selected personality ID
+
+    Returns:
+        InlineKeyboardMarkup with timeframe buttons
+    """
+    timeframes = [
+        ("📝 50 сообщений", "50"),
+        ("📝 100 сообщений", "100"),
+        ("📝 200 сообщений", "200"),
+        ("📝 500 сообщений", "500"),
+        ("⏰ 1 час", "1h"),
+        ("⏰ 2 часа", "2h"),
+        ("⏰ 6 часов", "6h"),
+        ("⏰ 12 часов", "12h"),
+        ("📅 Сегодня", "today"),
+    ]
+
+    keyboard = []
+    row = []
+
+    for label, value in timeframes:
+        # Callback format: summary_timeframe:<chat_id>:<personality_id>:<timeframe>:<signature>
+        callback_base = f"{chat_id}:{personality_id}:{value}"
+        signature = create_signature(callback_base, user_id)
+        callback_data = f"summary_timeframe:{callback_base}:{signature}"
+
+        row.append(InlineKeyboardButton(label, callback_data=callback_data))
+
+        # 2 buttons per row
+        if len(row) == 2:
+            keyboard.append(row)
+            row = []
+
+    # Add last row if odd number
+    if row:
+        keyboard.append(row)
+
+    return InlineKeyboardMarkup(keyboard)
+
+
 async def summary_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     Handle /суть command
@@ -38,11 +123,10 @@ async def summary_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 
 async def _summary_in_group(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle /суть in a group chat"""
+    """Handle /summary in a group chat - show personality selection menu"""
     user = update.effective_user
     chat = update.effective_chat
     db = DBService()
-    ai = AIService()
 
     # 1. Rate limit check
     ok, remaining = check_rate_limit(user.id)
@@ -60,66 +144,40 @@ async def _summary_in_group(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         )
         return
 
-    # 3. Parse time argument
-    since, period_desc = get_default_period()
-
+    # 3. Parse custom limit argument (if provided)
+    custom_limit = None
     if context.args:
-        arg = context.args[0]
-        parsed_since, parsed_desc = parse_time_argument(arg)
-
-        if parsed_since is None:
+        try:
+            custom_limit = str(int(context.args[0]))  # Validate it's a number
+            logger.info(f"Custom message limit: {custom_limit}")
+        except ValueError:
             await update.message.reply_text(
-                f"❌ Неверный формат времени: {parsed_desc}\n\n"
+                f"❌ Неверный формат. Используй число сообщений:\n\n"
                 f"Примеры:\n"
-                f"/{config.COMMAND_SUMMARY} 30м\n"
-                f"/{config.COMMAND_SUMMARY} 6ч\n"
-                f"/{config.COMMAND_SUMMARY} сегодня"
+                f"/{config.COMMAND_SUMMARY} 100\n"
+                f"/{config.COMMAND_SUMMARY} 200"
             )
             return
 
-        since = parsed_since
-        period_desc = parsed_desc
+    # 4. Get personalities (base + user's custom)
+    personalities = db.get_user_personalities(user.id)
 
-    # 4. Get messages
-    messages = db.get_messages(
-        chat_id=chat.id,
-        since=since,
-        limit=config.MAX_MESSAGES_PER_SUMMARY
-    )
-
-    if not messages:
+    if not personalities:
         await update.message.reply_text(
-            f"📭 Нет сообщений {period_desc}."
+            "❌ Не найдено ни одной личности. Попробуй позже."
         )
+        logger.error(f"No personalities found for user {user.id}")
         return
 
-    # 5. Get user's personality
-    personality_name = db.get_user_personality(user.id)
-    personality = db.get_personality(personality_name)
+    # 5. Show personality selection menu
+    keyboard = _build_personality_menu(personalities, user.id, chat.id, custom_limit)
 
-    if not personality:
-        logger.error(f"Personality '{personality_name}' not found, using default")
-        personality = db.get_personality(config.DEFAULT_PERSONALITY)
+    await update.message.reply_text(
+        "🎭 Выбери личность для саммари:",
+        reply_markup=keyboard
+    )
 
-    # 6. Generate summary
-    await update.message.reply_text("⏳ Генерирую саммари...")
-
-    summary = ai.generate_summary(messages, personality, period_desc)
-
-    # 7. Send summary
-    await update.message.reply_text(summary)
-
-    # 8. Set cooldown
-    set_cooldown(chat.id, 'summary')
-
-    # 9. Log event
-    db.log_event(user.id, chat.id, 'summary', {
-        'period': period_desc,
-        'message_count': len(messages),
-        'personality': personality_name
-    })
-
-    logger.info(f"Generated summary for chat {chat.id} ({len(messages)} messages)")
+    logger.info(f"Showed personality menu to user {user.id} in chat {chat.id}")
 
 
 async def _summary_in_dm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -250,3 +308,203 @@ async def summary_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     })
 
     logger.info(f"Generated DM summary for user {user.id}, chat {chat_id}")
+
+
+async def summary_personality_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Handle personality selection callback.
+
+    Callback data format: summary_personality:<chat_id>:<personality_id>:<custom_limit_or_none>:<signature>
+
+    If custom_limit is provided -> execute summary immediately
+    If custom_limit is "none" -> show timeframe menu
+    """
+    query = update.callback_query
+    user = query.from_user
+    db = DBService()
+
+    await query.answer()
+
+    # Parse callback data
+    try:
+        _, chat_id_str, personality_id_str, custom_limit, signature = query.data.split(':')
+        chat_id = int(chat_id_str)
+        personality_id = int(personality_id_str)
+    except (ValueError, IndexError) as e:
+        await query.message.reply_text("❌ Неверные данные кнопки")
+        logger.error(f"Error parsing personality callback: {e}")
+        return
+
+    # Verify signature
+    callback_base = f"{chat_id}:{personality_id}:{custom_limit}"
+    if not verify_signature(callback_base, user.id, signature):
+        await query.message.reply_text("❌ Неверная подпись. Попробуй заново.")
+        return
+
+    # Get personality
+    personality = db.get_personality_by_id(personality_id)
+    if not personality:
+        await query.message.reply_text("❌ Личность не найдена.")
+        logger.error(f"Personality {personality_id} not found")
+        return
+
+    # If custom limit provided -> execute summary immediately
+    if custom_limit != "none":
+        try:
+            limit = int(custom_limit)
+            await _execute_summary(
+                query=query,
+                user=user,
+                chat_id=chat_id,
+                personality=personality,
+                timeframe=str(limit),
+                context=context
+            )
+        except ValueError:
+            await query.message.reply_text("❌ Неверный формат количества сообщений.")
+        return
+
+    # Otherwise -> show timeframe menu
+    keyboard = _build_timeframe_menu(user.id, chat_id, personality_id)
+
+    await query.message.edit_text(
+        f"🎭 Личность: {personality.emoji} {personality.display_name}\n\n"
+        f"⏰ Выбери период для саммари:",
+        reply_markup=keyboard
+    )
+
+    logger.info(f"User {user.id} selected personality {personality.name} for chat {chat_id}")
+
+
+async def summary_timeframe_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Handle timeframe selection callback.
+
+    Callback data format: summary_timeframe:<chat_id>:<personality_id>:<timeframe>:<signature>
+
+    Execute summary with selected personality and timeframe.
+    """
+    query = update.callback_query
+    user = query.from_user
+    db = DBService()
+
+    await query.answer()
+
+    # Parse callback data
+    try:
+        _, chat_id_str, personality_id_str, timeframe, signature = query.data.split(':')
+        chat_id = int(chat_id_str)
+        personality_id = int(personality_id_str)
+    except (ValueError, IndexError) as e:
+        await query.message.reply_text("❌ Неверные данные кнопки")
+        logger.error(f"Error parsing timeframe callback: {e}")
+        return
+
+    # Verify signature
+    callback_base = f"{chat_id}:{personality_id}:{timeframe}"
+    if not verify_signature(callback_base, user.id, signature):
+        await query.message.reply_text("❌ Неверная подпись. Попробуй заново.")
+        return
+
+    # Get personality
+    personality = db.get_personality_by_id(personality_id)
+    if not personality:
+        await query.message.reply_text("❌ Личность не найдена.")
+        logger.error(f"Personality {personality_id} not found")
+        return
+
+    # Execute summary
+    await _execute_summary(
+        query=query,
+        user=user,
+        chat_id=chat_id,
+        personality=personality,
+        timeframe=timeframe,
+        context=context
+    )
+
+
+async def _execute_summary(
+    query,
+    user,
+    chat_id: int,
+    personality,
+    timeframe: str,
+    context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """
+    Execute summary generation with given parameters.
+
+    Args:
+        query: CallbackQuery object
+        user: User object
+        chat_id: Chat ID to summarize
+        personality: Personality object
+        timeframe: Timeframe string (e.g., "50", "100", "1h", "2h", "today")
+        context: Bot context
+    """
+    db = DBService()
+    ai = AIService()
+
+    # Parse timeframe
+    if timeframe.isdigit():
+        # Number of messages
+        limit = int(timeframe)
+        since = None
+        period_desc = f"последние {limit} сообщений"
+    else:
+        # Time-based (1h, 2h, today)
+        since, period_desc = parse_time_argument(timeframe)
+        if since is None:
+            await query.message.reply_text(f"❌ Неверный формат времени: {period_desc}")
+            return
+        limit = config.MAX_MESSAGES_PER_SUMMARY
+
+    # Get messages
+    messages = db.get_messages(
+        chat_id=chat_id,
+        since=since,
+        limit=limit
+    )
+
+    if not messages:
+        await query.message.edit_text(f"📭 Нет сообщений за период: {period_desc}")
+        return
+
+    # Generate summary
+    await query.message.edit_text(
+        f"⏳ Генерирую саммари...\n\n"
+        f"🎭 Личность: {personality.emoji} {personality.display_name}\n"
+        f"📊 Период: {period_desc}"
+    )
+
+    try:
+        summary = ai.generate_summary(messages, personality, period_desc)
+
+        # Send summary
+        await query.message.edit_text(
+            f"📝 Саммари готово!\n\n"
+            f"🎭 {personality.emoji} {personality.display_name}\n"
+            f"📊 {period_desc}\n"
+            f"💬 Сообщений: {len(messages)}\n\n"
+            f"{summary}"
+        )
+
+        # Set cooldown
+        set_cooldown(chat_id, 'summary')
+
+        # Log event
+        db.log_event(user.id, chat_id, 'summary', {
+            'period': period_desc,
+            'message_count': len(messages),
+            'personality': personality.name
+        })
+
+        logger.info(f"Generated summary for chat {chat_id} ({len(messages)} messages) with personality {personality.name}")
+
+    except Exception as e:
+        logger.error(f"Error generating summary: {e}")
+        await query.message.edit_text(
+            f"❌ Ошибка при генерации саммари. Попробуй позже.\n\n"
+            f"Детали: {str(e)[:100]}"
+        )

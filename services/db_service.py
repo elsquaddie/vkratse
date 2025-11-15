@@ -237,6 +237,33 @@ class DBService:
             logger.error(f"Error counting user personalities: {e}")
             return 0
 
+    def get_user_personalities(self, user_id: int) -> List[Personality]:
+        """
+        Get all personalities available to a user (base personalities + their custom ones).
+
+        Args:
+            user_id: Telegram user ID
+
+        Returns:
+            List of Personality objects (base + user's custom)
+        """
+        try:
+            # Get all base personalities (is_custom=False) + user's custom personalities
+            response = self.client.table('personalities')\
+                .select('*')\
+                .eq('is_active', True)\
+                .or_(f'is_custom.eq.false,created_by_user_id.eq.{user_id}')\
+                .order('is_custom')\
+                .order('id')\
+                .execute()
+
+            personalities = [Personality.from_dict(p) for p in response.data]
+            logger.info(f"Retrieved {len(personalities)} personalities for user {user_id}")
+            return personalities
+        except Exception as e:
+            logger.error(f"Error getting user personalities: {e}")
+            return []
+
     def delete_personality(self, name: str, user_id: int) -> bool:
         """
         Delete a custom personality (only if created by this user)

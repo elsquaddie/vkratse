@@ -226,7 +226,7 @@ async def handle_direct_message(
         if not personality_name or personality_name == config.DEFAULT_PERSONALITY:
             await update.message.reply_text(
                 "🎭 Сначала выбери личность для общения!\n\n"
-                "Используй команду /lichnost чтобы выбрать стиль общения."
+                f"Используй команду /{config.COMMAND_PERSONALITY} чтобы выбрать стиль общения."
             )
             return
 
@@ -234,7 +234,7 @@ async def handle_direct_message(
         personality = db_service.get_personality(personality_name)
         if not personality:
             await update.message.reply_text(
-                "❌ Личность не найдена. Выбери другую: /lichnost"
+                f"❌ Личность не найдена. Выбери другую: /{config.COMMAND_PERSONALITY}"
             )
             return
 
@@ -299,7 +299,7 @@ async def chat_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     if chat.type == ChatType.PRIVATE:
         await update.message.reply_text(
             "💬 В личных сообщениях ты можешь сразу писать мне!\n\n"
-            "Просто выбери личность через /lichnost и начинай общаться."
+            f"Просто выбери личность через /{config.COMMAND_PERSONALITY} и начинай общаться."
         )
         return
 
@@ -308,8 +308,8 @@ async def chat_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
     # Show personality selection for group chat
     await update.message.reply_text(
-        "🎭 Выбери личность для общения в этом чате:\n\n"
-        "(Функция в разработке - пока используй /summary)"
+        f"🎭 Выбери личность для общения в этом чате:\n\n"
+        f"(Функция в разработке - пока используй /{config.COMMAND_SUMMARY})"
     )
 
     logger.info(f"User {user.id} requested /chat in group {chat.id}")
@@ -365,7 +365,7 @@ async def handle_create_personality_callback(
 
         await query.edit_message_text(
             "🎨 Чтобы создать свою личность, используй команду:\n\n"
-            "/lichnost\n\n"
+            f"/{config.COMMAND_PERSONALITY}\n\n"
             "Там ты сможешь выбрать 'Создать свою' и описать уникальный стиль!"
         )
 
@@ -373,4 +373,4 @@ async def handle_create_personality_callback(
 
     except Exception as e:
         logger.error(f"Error handling create personality callback: {e}")
-        await query.edit_message_text("❌ Ошибка. Попробуй /lichnost")
+        await query.edit_message_text(f"❌ Ошибка. Попробуй /{config.COMMAND_PERSONALITY}")

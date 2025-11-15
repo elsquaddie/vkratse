@@ -48,15 +48,15 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         # Group chat: show brief help message
         group_text = f"""👋 Привет!
 
-Я бот для саммаризации чатов и общения в разных стилях.
+Я бот с множественными личностями для саммаризации и общения.
 
-🎯 Основные команды:
-• /{config.COMMAND_SUMMARY} — саммари чата
-• /chat — начать общение
+🎯 Команды:
+• /{config.COMMAND_SUMMARY} — саммаризировать чат
+• /{config.COMMAND_CHAT} — начать общение
 • /{config.COMMAND_JUDGE} — рассудить спор
 • /{config.COMMAND_PERSONALITY} — выбрать личность
 
-Напиши мне в ЛС (@{context.bot.username}) для настройки!"""
+💬 Напиши мне в ЛС (@{context.bot.username}) для настройки!"""
 
         await update.message.reply_text(group_text)
 
@@ -91,7 +91,7 @@ async def handle_start_menu_callback(update: Update, context: ContextTypes.DEFAU
 
         elif action == "add_to_group":
             # Show group addition instructions (will be implemented in Phase 3 - onboarding module)
-            text = """🎉 Добавь меня в свою группу!
+            text = f"""🎉 Добавь меня в свою группу!
 
 Я смогу:
 ✅ Саммаризировать обсуждения
@@ -104,9 +104,9 @@ async def handle_start_menu_callback(update: Update, context: ContextTypes.DEFAU
 3. Выбери нужную группу
 
 После добавления используй команды:
-• /summary — саммари обсуждений
-• /chat — начать общение
-• /rassudi — рассудить спор"""
+• /{config.COMMAND_SUMMARY} — саммаризировать чат
+• /{config.COMMAND_CHAT} — начать общение
+• /{config.COMMAND_JUDGE} — рассудить спор"""
 
             await query.edit_message_text(text)
 
@@ -122,6 +122,40 @@ async def handle_start_menu_callback(update: Update, context: ContextTypes.DEFAU
     except Exception as e:
         logger.error(f"Error handling start menu callback: {e}")
         await query.edit_message_text("❌ Ошибка. Попробуй /start")
+
+
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Handle /help command
+    Show comprehensive help message with all commands
+    """
+    user = update.effective_user
+    chat_type = update.effective_chat.type
+    logger.info(f"User {user.id} requested help in {chat_type}")
+
+    help_text = f"""📚 Справка по командам
+
+🎭 **Личность AI:**
+/{config.COMMAND_PERSONALITY} — выбрать или создать личность
+
+💬 **Общение:**
+• В ЛС: просто пиши мне после выбора личности
+• В группе: /{config.COMMAND_CHAT} — начать сессию общения (в разработке)
+
+📝 **Саммаризация:**
+/{config.COMMAND_SUMMARY} — создать саммари обсуждения
+• В группе: саммари текущего чата
+• В ЛС: выбери чат для саммари
+
+⚖️ **Судейство:**
+/{config.COMMAND_JUDGE} — рассудить спор
+
+📊 **Статистика:**
+/stats — твоя статистика использования
+
+❓ Остались вопросы? Напиши /{config.COMMAND_START}"""
+
+    await update.message.reply_text(help_text)
 
 
 async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

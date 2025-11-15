@@ -111,7 +111,7 @@ except ValueError as e:
 # ================================================
 import logging
 
-LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
+LOG_LEVEL = os.getenv('LOG_LEVEL', 'WARNING')  # Only warnings and errors by default
 
 # Verbose logging (checkpoint logs) - disabled in production
 # Set to 'true' in environment to enable detailed checkpoint logging
@@ -121,8 +121,15 @@ def setup_logging():
     """Setup logging configuration"""
     logging.basicConfig(
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        level=getattr(logging, LOG_LEVEL.upper(), logging.INFO)
+        level=getattr(logging, LOG_LEVEL.upper(), logging.WARNING)
     )
+
+    # Disable noisy loggers from external libraries
+    logging.getLogger('httpx').setLevel(logging.WARNING)
+    logging.getLogger('httpcore').setLevel(logging.WARNING)
+    logging.getLogger('telegram').setLevel(logging.WARNING)
+    logging.getLogger('telegram.ext').setLevel(logging.WARNING)
+
     return logging.getLogger(__name__)
 
 logger = setup_logging()

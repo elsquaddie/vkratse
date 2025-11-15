@@ -17,7 +17,6 @@ class AIService:
         """Initialize Anthropic client"""
         self.client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
         self.model = config.ANTHROPIC_MODEL
-        logger.info("AIService initialized")
 
     def generate_summary(
         self,

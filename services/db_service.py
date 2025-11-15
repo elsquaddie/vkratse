@@ -20,7 +20,6 @@ class DBService:
             config.SUPABASE_URL,
             config.SUPABASE_KEY
         )
-        logger.info("DBService initialized")
 
     # ================================================
     # MESSAGES

@@ -18,7 +18,6 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     """
     user = update.effective_user
     chat_type = update.effective_chat.type
-    logger.info(f"User {user.id} ({user.username}) started the bot in {chat_type}")
 
     # Different behavior for private vs group chats
     if chat_type == ChatType.PRIVATE:
@@ -46,17 +45,9 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
     else:
         # Group chat: show brief help message
-        group_text = f"""👋 Привет!
+        group_text = f"""👋 Привет! Я бот с множественными личностями.
 
-Я бот с множественными личностями для саммаризации и общения.
-
-🎯 Команды:
-• /{config.COMMAND_SUMMARY} — саммаризировать чат
-• /{config.COMMAND_CHAT} — начать общение
-• /{config.COMMAND_JUDGE} — рассудить спор
-• /{config.COMMAND_PERSONALITY} — выбрать личность
-
-💬 Напиши мне в ЛС (@{context.bot.username}) для настройки!"""
+Используй /{config.COMMAND_HELP} для списка команд или напиши мне в ЛС (@{context.bot.username}) для настройки."""
 
         await update.message.reply_text(group_text)
 
@@ -117,8 +108,6 @@ async def handle_start_menu_callback(update: Update, context: ContextTypes.DEFAU
         else:
             await query.edit_message_text("❌ Неизвестное действие. Попробуй /start")
 
-        logger.info(f"Handled start menu callback: {action} from user {update.effective_user.id}")
-
     except Exception as e:
         logger.error(f"Error handling start menu callback: {e}")
         await query.edit_message_text("❌ Ошибка. Попробуй /start")
@@ -129,10 +118,6 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     Handle /help command
     Show comprehensive help message with all commands
     """
-    user = update.effective_user
-    chat_type = update.effective_chat.type
-    logger.info(f"User {user.id} requested help in {chat_type}")
-
     help_text = f"""📚 Справка по командам
 
 🎭 **Личность AI:**
@@ -166,8 +151,6 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     from services import DBService
 
     user = update.effective_user
-    logger.info(f"User {user.id} requested stats")
-
     db = DBService()
     stats = db.get_user_stats(user.id)
 

@@ -11,6 +11,7 @@ from config import logger
 from services import DBService
 from utils import (
     sanitize_personality_prompt,
+    extract_user_description,
     is_valid_personality_name,
     build_personality_menu,
     get_current_personality_display
@@ -417,9 +418,12 @@ async def edit_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
 
     # Handle description edit
     elif action == "description":
+        # Extract original user description (without wrapper)
+        original_description = extract_user_description(personality.system_prompt)
+
         await query.message.edit_text(
             f"📝 Изменение описания\n\n"
-            f"Текущее описание:\n{personality.system_prompt}\n\n"
+            f"Текущее описание:\n{original_description}\n\n"
             f"Введи новое описание (от {config.MIN_PERSONALITY_DESCRIPTION_LENGTH} "
             f"до {config.MAX_PERSONALITY_DESCRIPTION_LENGTH} символов)\n\n"
             f"Или /cancel для отмены."

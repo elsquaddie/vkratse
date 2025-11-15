@@ -89,7 +89,12 @@ try:
         stats_command,
         handle_start_menu_callback
     )
-    from modules.summaries import summary_command, summary_callback
+    from modules.summaries import (
+        summary_command,
+        summary_callback,
+        summary_personality_callback,
+        summary_timeframe_callback
+    )
     from modules.judge import judge_command
     from modules.personalities import (
         personality_command,
@@ -237,6 +242,14 @@ def create_bot_application():
     app.add_handler(CallbackQueryHandler(
         summary_callback,
         pattern="^summary:"
+    ))
+    app.add_handler(CallbackQueryHandler(
+        summary_personality_callback,
+        pattern="^summary_personality:"
+    ))
+    app.add_handler(CallbackQueryHandler(
+        summary_timeframe_callback,
+        pattern="^summary_timeframe:"
     ))
 
     # Chat commands (group chat sessions)

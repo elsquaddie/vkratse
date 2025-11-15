@@ -2,7 +2,12 @@
 Utility functions
 """
 
-from .security import create_signature, verify_signature, sanitize_personality_prompt
+from .security import (
+    create_signature,
+    verify_signature,
+    sanitize_personality_prompt,
+    extract_user_description
+)
 from .cooldown import check_cooldown, set_cooldown
 from .rate_limit import check_rate_limit
 from .validators import validate_chat_access, extract_mentions, is_valid_personality_name
@@ -13,6 +18,7 @@ __all__ = [
     'create_signature',
     'verify_signature',
     'sanitize_personality_prompt',
+    'extract_user_description',
     'check_cooldown',
     'set_cooldown',
     'check_rate_limit',

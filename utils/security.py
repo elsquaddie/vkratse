@@ -123,6 +123,47 @@ def sanitize_personality_prompt(text: str) -> str:
     return safe_prompt
 
 
+def extract_user_description(system_prompt: str) -> str:
+    """
+    Extract original user description from sanitized prompt.
+
+    Args:
+        system_prompt: Full system prompt with wrapper
+
+    Returns:
+        Original user description without wrapper
+    """
+    # Try to extract from "Твоя личность: {text}" line
+    try:
+        # Find the line with "Твоя личность:"
+        lines = system_prompt.split('\n')
+        for line in lines:
+            if line.strip().startswith('Твоя личность:'):
+                # Extract everything after "Твоя личность: "
+                description = line.split('Твоя личность:', 1)[1].strip()
+                # Unescape quotes
+                description = description.replace('\\"', '"').replace("\\'", "'")
+                return description
+
+        # Fallback: try to extract from first line with quotes
+        for line in lines:
+            if 'Ты - AI ассистент с этой личностью:' in line:
+                # Extract text between quotes
+                start = line.find('"') + 1
+                end = line.rfind('"')
+                if start > 0 and end > start:
+                    description = line[start:end]
+                    description = description.replace('\\"', '"').replace("\\'", "'")
+                    return description
+
+        # If can't extract, return as is (might be base personality)
+        return system_prompt.strip()
+
+    except Exception as e:
+        logger.error(f"Error extracting user description: {e}")
+        return system_prompt.strip()
+
+
 def sign_callback_data(data: str) -> str:
     """
     Sign callback_data string with HMAC signature

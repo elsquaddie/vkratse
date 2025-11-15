@@ -102,8 +102,16 @@ try:
         receive_personality_name,
         receive_personality_description,
         cancel_personality_creation,
+        edit_callback,
+        receive_edited_name,
+        receive_edited_emoji,
+        receive_edited_description,
         AWAITING_NAME,
-        AWAITING_DESCRIPTION
+        AWAITING_DESCRIPTION,
+        AWAITING_EDIT_CHOICE,
+        AWAITING_EDIT_NAME,
+        AWAITING_EDIT_EMOJI,
+        AWAITING_EDIT_DESCRIPTION
     )
     from modules.direct_chat import (
         handle_personality_selection,
@@ -259,7 +267,7 @@ def create_bot_application():
     # Judge command
     app.add_handler(CommandHandler(config.COMMAND_JUDGE, judge_command))
 
-    # Personality command with conversation for creating custom ones
+    # Personality command with conversation for creating/editing custom ones
     personality_conv = ConversationHandler(
         entry_points=[
             CommandHandler(config.COMMAND_PERSONALITY, personality_command),
@@ -272,6 +280,18 @@ def create_bot_application():
             # AWAITING_EMOJI step removed - using default emoji 🎭
             AWAITING_DESCRIPTION: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, receive_personality_description)
+            ],
+            AWAITING_EDIT_CHOICE: [
+                CallbackQueryHandler(edit_callback, pattern="^edit:")
+            ],
+            AWAITING_EDIT_NAME: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, receive_edited_name)
+            ],
+            AWAITING_EDIT_EMOJI: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, receive_edited_emoji)
+            ],
+            AWAITING_EDIT_DESCRIPTION: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, receive_edited_description)
             ]
         },
         fallbacks=[

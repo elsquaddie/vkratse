@@ -9,12 +9,21 @@ from telegram.constants import ParseMode
 import config
 from config import logger
 from services import DBService
-from utils import sanitize_personality_prompt, is_valid_personality_name
+from utils import (
+    sanitize_personality_prompt,
+    is_valid_personality_name,
+    build_personality_menu,
+    get_current_personality_display
+)
 
 # Conversation states
 AWAITING_NAME = 1
 AWAITING_EMOJI = 2
 AWAITING_DESCRIPTION = 3
+AWAITING_EDIT_CHOICE = 4
+AWAITING_EDIT_NAME = 5
+AWAITING_EDIT_EMOJI = 6
+AWAITING_EDIT_DESCRIPTION = 7
 
 
 async def personality_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -27,84 +36,26 @@ async def personality_command(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     logger.info(f"Personality command from user {user.id}")
 
-    # 1. Get all personalities
-    all_personalities = db.get_all_personalities()
-
-    if not all_personalities:
-        await update.message.reply_text("❌ Личности не найдены. Проверь БД.")
-        return
-
-    # 2. Split into base and custom (user's own)
-    base_personalities = [p for p in all_personalities if not p.is_custom]
-    custom_personalities = [
-        p for p in all_personalities
-        if p.is_custom and p.created_by_user_id == user.id
-    ]
-
-    # 3. Get current personality
+    # Get current personality
     current_personality_name = db.get_user_personality(user.id)
-    current_personality = db.get_personality(current_personality_name)
-    current_display = current_personality.display_name if current_personality else "Нейтральный"
+    current_display = get_current_personality_display(user.id)
 
-    # 4. Build keyboard
-    keyboard = []
-
-    # Base personalities in 2 columns
-    row = []
-    for p in base_personalities:
-        button_text = f"{p.emoji} {p.display_name}"
-        if p.name == current_personality_name:
-            button_text += " ✓"  # Mark current
-
-        row.append(InlineKeyboardButton(
-            button_text,
-            callback_data=f"pers:select:{p.name}"
-        ))
-
-        if len(row) == 2:
-            keyboard.append(row)
-            row = []
-
-    if row:  # Add remaining
-        keyboard.append(row)
-
-    # Custom personalities
-    if custom_personalities:
-        keyboard.append([InlineKeyboardButton(
-            "─── Мои личности ───",
-            callback_data="pers:noop"
-        )])
-
-        for p in custom_personalities:
-            button_text = f"🎭 {p.display_name}"
-            if p.name == current_personality_name:
-                button_text += " ✓"
-
-            # Row with select button and delete button
-            keyboard.append([
-                InlineKeyboardButton(
-                    button_text,
-                    callback_data=f"pers:select:{p.name}"
-                ),
-                InlineKeyboardButton(
-                    "🗑️",
-                    callback_data=f"pers:delete:{p.name}"
-                )
-            ])
-
-    # Create button
-    keyboard.append([InlineKeyboardButton(
-        "➕ Создать свою личность",
-        callback_data="pers:create_start"
-    )])
-
-    reply_markup = InlineKeyboardMarkup(keyboard)
+    # Build menu using universal function (management context)
+    reply_markup = build_personality_menu(
+        user_id=user.id,
+        callback_prefix="pers:select",
+        context="manage",
+        current_personality=current_personality_name,
+        show_create_button=True
+    )
 
     message_text = f"""🎭 Выбери личность AI
 
 Текущая: {current_display}
 
-Личность определяет стиль ответов бота на твои команды."""
+Личность определяет стиль ответов бота на твои команды.
+
+💡 Кастомные личности можно редактировать ✏️ или удалять 🗑️"""
 
     await update.message.reply_text(message_text, reply_markup=reply_markup)
 
@@ -168,6 +119,45 @@ async def personality_callback(update: Update, context: ContextTypes.DEFAULT_TYP
             "Напиши название или /cancel для отмены."
         )
         return AWAITING_NAME
+
+    # Handle edit
+    elif action == "edit":
+        if len(parts) < 3:
+            return ConversationHandler.END
+
+        personality_name = parts[2]
+
+        # Get personality info
+        personality = db.get_personality(personality_name)
+        if not personality:
+            await query.answer("❌ Личность не найдена", show_alert=True)
+            return ConversationHandler.END
+
+        # Verify ownership
+        if personality.created_by_user_id != user.id:
+            await query.answer("❌ Можно редактировать только свои личности", show_alert=True)
+            return ConversationHandler.END
+
+        # Store personality name in context
+        context.user_data['editing_personality'] = personality_name
+
+        # Show edit menu
+        keyboard = [
+            [InlineKeyboardButton("✏️ Изменить название", callback_data=f"edit:name:{personality_name}")],
+            [InlineKeyboardButton("🎨 Изменить эмодзи", callback_data=f"edit:emoji:{personality_name}")],
+            [InlineKeyboardButton("📝 Изменить описание", callback_data=f"edit:description:{personality_name}")],
+            [InlineKeyboardButton("❌ Отмена", callback_data="edit:cancel")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
+        await query.message.edit_text(
+            f"✏️ Редактирование личности\n\n"
+            f"🎭 {personality.emoji} {personality.display_name}\n\n"
+            f"Что хочешь изменить?",
+            reply_markup=reply_markup
+        )
+        logger.info(f"User {user.id} started editing personality '{personality_name}'")
+        return AWAITING_EDIT_CHOICE
 
     # Handle delete
     elif action == "delete":
@@ -364,12 +354,215 @@ async def receive_personality_description(update: Update, context: ContextTypes.
     return ConversationHandler.END
 
 
+async def edit_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """
+    Handle edit choice callback
+
+    Callback data format: edit:{field}:{personality_name} or edit:cancel
+    """
+    query = update.callback_query
+    user = query.from_user
+    db = DBService()
+
+    await query.answer()
+
+    # Parse callback data
+    parts = query.data.split(':')
+    if len(parts) < 2:
+        return ConversationHandler.END
+
+    action = parts[1]
+
+    # Handle cancel
+    if action == "cancel":
+        await query.message.edit_text(
+            "❌ Редактирование отменено.\n\n"
+            f"Используй /{config.COMMAND_PERSONALITY} для управления личностями."
+        )
+        context.user_data.clear()
+        return ConversationHandler.END
+
+    # Get personality name
+    if len(parts) < 3:
+        return ConversationHandler.END
+
+    personality_name = parts[2]
+    personality = db.get_personality(personality_name)
+
+    if not personality:
+        await query.message.edit_text("❌ Личность не найдена")
+        return ConversationHandler.END
+
+    # Store what we're editing
+    context.user_data['editing_personality'] = personality_name
+    context.user_data['editing_field'] = action
+
+    # Handle name edit
+    if action == "name":
+        await query.message.edit_text(
+            f"✏️ Изменение названия\n\n"
+            f"Текущее название: {personality.display_name}\n\n"
+            f"Введи новое название или /cancel для отмены."
+        )
+        return AWAITING_EDIT_NAME
+
+    # Handle emoji edit
+    elif action == "emoji":
+        await query.message.edit_text(
+            f"🎨 Изменение эмодзи\n\n"
+            f"Текущий эмодзи: {personality.emoji}\n\n"
+            f"Отправь новый эмодзи или /cancel для отмены."
+        )
+        return AWAITING_EDIT_EMOJI
+
+    # Handle description edit
+    elif action == "description":
+        await query.message.edit_text(
+            f"📝 Изменение описания\n\n"
+            f"Текущее описание:\n{personality.system_prompt}\n\n"
+            f"Введи новое описание (от {config.MIN_PERSONALITY_DESCRIPTION_LENGTH} "
+            f"до {config.MAX_PERSONALITY_DESCRIPTION_LENGTH} символов)\n\n"
+            f"Или /cancel для отмены."
+        )
+        return AWAITING_EDIT_DESCRIPTION
+
+    return ConversationHandler.END
+
+
+async def receive_edited_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Receive new personality name"""
+    user = update.effective_user
+    new_name = update.message.text.strip().lower()
+    personality_name = context.user_data.get('editing_personality')
+
+    if not personality_name:
+        await update.message.reply_text("❌ Ошибка: личность не найдена. Начни заново.")
+        return ConversationHandler.END
+
+    # Validate name
+    is_valid, error_msg = is_valid_personality_name(new_name)
+    if not is_valid:
+        await update.message.reply_text(
+            f"❌ {error_msg}\n\n"
+            "Попробуй другое название или /cancel для отмены."
+        )
+        return AWAITING_EDIT_NAME
+
+    # Check if name already exists (and it's not the current one)
+    db = DBService()
+    if new_name != personality_name and db.personality_exists(new_name):
+        await update.message.reply_text(
+            f"❌ Личность '{new_name}' уже существует.\n\n"
+            "Попробуй другое название или /cancel для отмены."
+        )
+        return AWAITING_EDIT_NAME
+
+    # Update personality
+    success = db.update_personality(
+        personality_name,
+        user.id,
+        display_name=new_name.capitalize()
+    )
+
+    if success:
+        await update.message.reply_text(
+            f"✅ Название изменено на: {new_name.capitalize()}\n\n"
+            f"Используй /{config.COMMAND_PERSONALITY} для дальнейшего управления."
+        )
+        logger.info(f"User {user.id} renamed personality '{personality_name}' to '{new_name}'")
+    else:
+        await update.message.reply_text("❌ Ошибка при обновлении. Попробуй позже.")
+
+    context.user_data.clear()
+    return ConversationHandler.END
+
+
+async def receive_edited_emoji(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Receive new personality emoji"""
+    user = update.effective_user
+    new_emoji = update.message.text.strip()
+    personality_name = context.user_data.get('editing_personality')
+
+    if not personality_name:
+        await update.message.reply_text("❌ Ошибка: личность не найдена. Начни заново.")
+        return ConversationHandler.END
+
+    # Validate emoji
+    if len(new_emoji) > 10 or len(new_emoji) == 0:
+        await update.message.reply_text(
+            "❌ Пожалуйста, отправь только один эмодзи.\n\n"
+            "Попробуй ещё раз или /cancel для отмены."
+        )
+        return AWAITING_EDIT_EMOJI
+
+    # Update personality
+    db = DBService()
+    success = db.update_personality(
+        personality_name,
+        user.id,
+        emoji=new_emoji
+    )
+
+    if success:
+        await update.message.reply_text(
+            f"✅ Эмодзи изменён на: {new_emoji}\n\n"
+            f"Используй /{config.COMMAND_PERSONALITY} для дальнейшего управления."
+        )
+        logger.info(f"User {user.id} changed emoji for personality '{personality_name}' to '{new_emoji}'")
+    else:
+        await update.message.reply_text("❌ Ошибка при обновлении. Попробуй позже.")
+
+    context.user_data.clear()
+    return ConversationHandler.END
+
+
+async def receive_edited_description(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Receive new personality description"""
+    user = update.effective_user
+    new_description = update.message.text.strip()
+    personality_name = context.user_data.get('editing_personality')
+
+    if not personality_name:
+        await update.message.reply_text("❌ Ошибка: личность не найдена. Начни заново.")
+        return ConversationHandler.END
+
+    # Sanitize description
+    try:
+        safe_prompt = sanitize_personality_prompt(new_description)
+    except ValueError as e:
+        await update.message.reply_text(
+            f"❌ {str(e)}\n\n"
+            "Попробуй другое описание или /cancel для отмены."
+        )
+        return AWAITING_EDIT_DESCRIPTION
+
+    # Update personality
+    db = DBService()
+    success = db.update_personality(
+        personality_name,
+        user.id,
+        system_prompt=safe_prompt
+    )
+
+    if success:
+        await update.message.reply_text(
+            f"✅ Описание обновлено!\n\n"
+            f"Используй /{config.COMMAND_PERSONALITY} для дальнейшего управления."
+        )
+        logger.info(f"User {user.id} updated description for personality '{personality_name}'")
+    else:
+        await update.message.reply_text("❌ Ошибка при обновлении. Попробуй позже.")
+
+    context.user_data.clear()
+    return ConversationHandler.END
+
+
 async def cancel_personality_creation(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Cancel personality creation"""
-    logger.info(f"User {update.effective_user.id} cancelled personality creation")
+    """Cancel personality creation or editing"""
+    logger.info(f"User {update.effective_user.id} cancelled personality operation")
 
     await update.message.reply_text(
-        "❌ Создание личности отменено.\n\n"
+        "❌ Операция отменена.\n\n"
         f"Используй /{config.COMMAND_PERSONALITY} чтобы выбрать существующую."
     )
 

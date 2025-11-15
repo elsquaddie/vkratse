@@ -5,7 +5,6 @@ Basic bot commands
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
-from telegram.constants import ChatType
 import config
 from config import logger
 from utils.security import sign_callback_data
@@ -17,12 +16,9 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     Show welcome message with inline menu for action selection
     """
     user = update.effective_user
-    chat_type = update.effective_chat.type
 
-    # Different behavior for private vs group chats
-    if chat_type == ChatType.PRIVATE:
-        # Private chat: show full welcome with inline menu
-        welcome_text = f"""👋 Привет, {user.first_name}!
+    # Unified welcome message for all chat types
+    welcome_text = f"""👋 Привет, {user.first_name}!
 
 Я бот с множественными личностями.
 
@@ -33,23 +29,15 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 Что будем делать?"""
 
-        # Build inline keyboard
-        keyboard = [
-            [InlineKeyboardButton("💬 Общаться напрямую", callback_data=sign_callback_data("direct_chat"))],
-            [InlineKeyboardButton("👥 Добавить в групповой чат", callback_data=sign_callback_data("add_to_group"))],
-            [InlineKeyboardButton("🎭 Настроить личность", callback_data=sign_callback_data("setup_personality"))]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
+    # Build inline keyboard
+    keyboard = [
+        [InlineKeyboardButton("💬 Общаться напрямую", callback_data=sign_callback_data("direct_chat"))],
+        [InlineKeyboardButton("👥 Добавить в групповой чат", callback_data=sign_callback_data("add_to_group"))],
+        [InlineKeyboardButton("🎭 Настроить личность", callback_data=sign_callback_data("setup_personality"))]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
 
-        await update.message.reply_text(welcome_text, reply_markup=reply_markup)
-
-    else:
-        # Group chat: show brief help message
-        group_text = f"""👋 Привет! Я бот с множественными личностями.
-
-Используй /{config.COMMAND_HELP} для списка команд или напиши мне в ЛС (@{context.bot.username}) для настройки."""
-
-        await update.message.reply_text(group_text)
+    await update.message.reply_text(welcome_text, reply_markup=reply_markup)
 
 
 async def handle_start_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

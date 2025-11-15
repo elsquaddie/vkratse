@@ -86,6 +86,7 @@ except Exception as e:
 try:
     from modules.commands import (
         start_command,
+        help_command,
         stats_command,
         handle_start_menu_callback
     )
@@ -191,12 +192,16 @@ if bot_initialized:
                 # Send welcome message
                 welcome_text = f"""👋 Привет! Я добавлен в чат.
 
-🎯 Что умею:
-• /{config.COMMAND_SUMMARY} — саммари чата
-• /{config.COMMAND_JUDGE} — рассудить спор
-• /{config.COMMAND_PERSONALITY} — выбрать стиль AI
+Я бот с множественными личностями.
 
-/{config.COMMAND_HELP} — полная справка"""
+Могу:
+• Саммаризировать обсуждения (/{config.COMMAND_SUMMARY})
+• Рассуживать споры (/{config.COMMAND_JUDGE})
+• Общаться в разных стилях (/{config.COMMAND_CHAT})
+
+💡 Дайте мне админ-права для полного функционала!
+
+Все команды: /{config.COMMAND_HELP}"""
 
                 await message.reply_text(welcome_text)
                 break
@@ -243,6 +248,7 @@ def create_bot_application():
 
     # Basic commands
     app.add_handler(CommandHandler("start", start_command))
+    app.add_handler(CommandHandler(config.COMMAND_HELP, help_command))
     app.add_handler(CommandHandler("stats", stats_command))
 
     # Summary command

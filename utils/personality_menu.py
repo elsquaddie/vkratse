@@ -6,7 +6,7 @@ Provides consistent UI across all personality selection contexts
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from typing import Optional, Dict, Any
 from services import DBService
-from utils import create_signature
+from utils import create_string_signature
 
 
 def build_personality_menu(
@@ -185,7 +185,7 @@ def _build_callback_data(
         limit = extra_data.get("limit", "none") if extra_data else "none"
 
         callback_base = f"{chat_id}:{personality.id}:{limit}"
-        signature = create_signature(callback_base, user_id)
+        signature = create_string_signature(callback_base, user_id)
 
         return f"{callback_prefix}:{callback_base}:{signature}"
 

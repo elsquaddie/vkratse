@@ -45,6 +45,60 @@ def verify_signature(chat_id: int, user_id: int, signature: str) -> bool:
     return hmac.compare_digest(expected, signature)
 
 
+def create_string_signature(data: str, user_id: int) -> str:
+    """
+    Create HMAC signature for arbitrary string data + user_id.
+
+    This is the correct function to use when signing callback_data
+    that contains multiple fields (e.g., "chat_id:personality_id:limit").
+
+    Args:
+        data: Arbitrary string to sign (e.g., "123:5:none")
+        user_id: User ID to include in signature
+
+    Returns:
+        HMAC signature (16 characters)
+
+    Example:
+        >>> create_string_signature("123:5:none", 456)
+        'a1b2c3d4e5f6g7h8'
+    """
+    message = f"{data}:{user_id}"
+    signature = hmac.new(
+        config.SECRET_KEY.encode(),
+        message.encode(),
+        hashlib.sha256
+    ).hexdigest()[:16]
+
+    logger.debug(f"Created signature for data='{data}', user_id={user_id}")
+    return signature
+
+
+def verify_string_signature(data: str, user_id: int, signature: str) -> bool:
+    """
+    Verify HMAC signature for arbitrary string data + user_id.
+
+    Args:
+        data: Arbitrary string that was signed (e.g., "123:5:none")
+        user_id: User ID that was included in signature
+        signature: Signature to verify
+
+    Returns:
+        True if valid, False otherwise
+
+    Example:
+        >>> verify_string_signature("123:5:none", 456, "a1b2c3d4e5f6g7h8")
+        True
+    """
+    expected = create_string_signature(data, user_id)
+    is_valid = hmac.compare_digest(expected, signature)
+
+    if not is_valid:
+        logger.warning(f"Invalid signature for data='{data}', user_id={user_id}")
+
+    return is_valid
+
+
 def sanitize_personality_prompt(text: str) -> str:
     """
     Sanitize custom personality prompt to prevent prompt injection

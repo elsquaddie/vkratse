@@ -303,9 +303,11 @@ async def summary_personality_callback(update: Update, context: ContextTypes.DEF
 
     # Parse callback data
     try:
+        logger.info(f"[SIGNATURE CHECK] Parsing callback_data: '{query.data}' from user {user.id}")
         _, chat_id_str, personality_id_str, custom_limit, signature = query.data.split(':')
         chat_id = int(chat_id_str)
         personality_id = int(personality_id_str)
+        logger.info(f"[SIGNATURE CHECK] Parsed: chat_id={chat_id}, personality_id={personality_id}, limit={custom_limit}, signature={signature}")
     except (ValueError, IndexError) as e:
         await query.message.reply_text("❌ Неверные данные кнопки")
         logger.error(f"Error parsing personality callback: {e}")
@@ -313,10 +315,14 @@ async def summary_personality_callback(update: Update, context: ContextTypes.DEF
 
     # Verify signature
     callback_base = f"{chat_id}:{personality_id}:{custom_limit}"
+    logger.info(f"[SIGNATURE CHECK] Verifying: callback_base='{callback_base}', user_id={user.id}, received_signature={signature}")
+
     if not verify_string_signature(callback_base, user.id, signature):
         await query.message.reply_text("❌ Неверная подпись. Попробуй заново.")
-        logger.error(f"Invalid signature for summary_personality: callback_base='{callback_base}', user_id={user.id}")
+        logger.error(f"[SIGNATURE CHECK] FAILED for summary_personality: callback_base='{callback_base}', user_id={user.id}, signature={signature}")
         return
+
+    logger.info(f"[SIGNATURE CHECK] SUCCESS for summary_personality")
 
     # Get personality
     personality = db.get_personality_by_id(personality_id)

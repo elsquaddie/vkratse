@@ -70,7 +70,7 @@ def create_string_signature(data: str, user_id: int) -> str:
         hashlib.sha256
     ).hexdigest()[:16]
 
-    logger.debug(f"Created signature for data='{data}', user_id={user_id}")
+    logger.info(f"[SIGNATURE CREATE] data='{data}', user_id={user_id}, message='{message}', signature='{signature}'")
     return signature
 
 
@@ -94,7 +94,7 @@ def verify_string_signature(data: str, user_id: int, signature: str) -> bool:
     is_valid = hmac.compare_digest(expected, signature)
 
     if not is_valid:
-        logger.warning(f"Invalid signature for data='{data}', user_id={user_id}")
+        logger.warning(f"Invalid signature for data='{data}', user_id={user_id}, expected='{expected}', received='{signature}'")
 
     return is_valid
 

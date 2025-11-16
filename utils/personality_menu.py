@@ -187,6 +187,9 @@ def _build_callback_data(
         callback_base = f"{chat_id}:{personality.id}:{limit}"
         signature = create_string_signature(callback_base, user_id)
 
+        from config import logger
+        logger.info(f"[SIGNATURE GEN] Creating callback for summary_personality: callback_base='{callback_base}', user_id={user_id}, signature={signature}, full='{callback_prefix}:{callback_base}:{signature}'")
+
         return f"{callback_prefix}:{callback_base}:{signature}"
 
     elif callback_prefix == "start_chat":

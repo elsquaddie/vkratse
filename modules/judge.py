@@ -100,8 +100,11 @@ async def handle_judge_personality_callback(update: Update, context: ContextType
 
     try:
         # Parse callback data: judge_personality:<chat_id>:<personality_id>:<signature>
+        logger.info(f"[JUDGE SIGNATURE CHECK] Parsing callback_data: '{query.data}' from user {user.id}")
+
         parts = query.data.split(":")
         if len(parts) != 4:
+            logger.error(f"[JUDGE SIGNATURE CHECK] Invalid format: expected 4 parts, got {len(parts)}")
             await query.edit_message_text("❌ Неверный формат данных")
             return
 
@@ -109,11 +112,18 @@ async def handle_judge_personality_callback(update: Update, context: ContextType
         chat_id = int(chat_id_str)
         personality_id = int(personality_id_str)
 
+        logger.info(f"[JUDGE SIGNATURE CHECK] Parsed: chat_id={chat_id}, personality_id={personality_id}, signature={signature}")
+
         # Verify HMAC signature
         callback_base = f"{chat_id}:{personality_id}"
+        logger.info(f"[JUDGE SIGNATURE CHECK] Verifying: callback_base='{callback_base}', user_id={user.id}, received_signature={signature}")
+
         if not verify_string_signature(callback_base, user.id, signature):
+            logger.error(f"[JUDGE SIGNATURE CHECK] FAILED for judge_personality: callback_base='{callback_base}', user_id={user.id}, signature={signature}")
             await query.edit_message_text("❌ Неверная подпись данных. Попробуй /start")
             return
+
+        logger.info(f"[JUDGE SIGNATURE CHECK] SUCCESS for judge_personality")
 
         # Get dispute description from context
         dispute_text = context.user_data.get('judge_dispute_text')

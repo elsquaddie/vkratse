@@ -22,7 +22,8 @@ ai_service = AIService()
 async def show_personality_selection(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
-    edit_message: bool = False
+    edit_message: bool = False,
+    show_back_button: bool = False
 ) -> None:
     """
     Show personality selection menu to the user.
@@ -31,6 +32,7 @@ async def show_personality_selection(
         update: Telegram update object
         context: Bot context
         edit_message: If True, edit existing message; if False, send new message
+        show_back_button: If True, show back button to main menu
     """
     try:
         user_id = update.effective_user.id
@@ -90,6 +92,13 @@ async def show_personality_selection(
             "➕ Создать свою личность",
             callback_data=sign_callback_data("create_personality")
         )])
+
+        # Add back button if needed
+        if show_back_button:
+            keyboard.append([InlineKeyboardButton(
+                "◀️ Назад",
+                callback_data=sign_callback_data("back_to_main")
+            )])
 
         reply_markup = InlineKeyboardMarkup(keyboard)
 

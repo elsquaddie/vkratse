@@ -212,6 +212,7 @@ async def handle_start_menu_callback(update: Update, context: ContextTypes.DEFAU
             from services import DBService
             from utils import build_personality_menu
 
+            user = query.from_user
             db = DBService()
             chat_id = update.effective_chat.id
 

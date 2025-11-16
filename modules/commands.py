@@ -236,15 +236,12 @@ async def handle_start_menu_callback(update: Update, context: ContextTypes.DEFAU
 
         elif action == "group_judge":
             # Show concise instructions for /rassudi command with "Got it" button
-            text = f"""⚖️ Рассудить спор
+            text = f"""⚖️ Рассудить спор - бот поможет рассудить спор в выбранном стиле! Просто дай контекст беседы и имена участников.
 
-Используй:
-/{config.COMMAND_JUDGE} @user1 @user2 описание
+Например, так:
+/{config.COMMAND_JUDGE} Дамирка и Настька поспорили о плоской земле. Кто прав?"""
 
-Пример:
-/{config.COMMAND_JUDGE} @ivan @petya Кто прав?"""
-
-            keyboard = [[InlineKeyboardButton("Понятно! ✓", callback_data=sign_callback_data("back_to_main"))]]
+            keyboard = [[InlineKeyboardButton("Рассудить! ⚖️", callback_data=sign_callback_data("back_to_main"))]]
             reply_markup = InlineKeyboardMarkup(keyboard)
             await query.edit_message_text(text, reply_markup=reply_markup)
 

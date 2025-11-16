@@ -317,7 +317,7 @@ def create_bot_application():
     # Handle /start menu callbacks
     app.add_handler(CallbackQueryHandler(
         handle_start_menu_callback,
-        pattern="^(direct_chat|add_to_group|setup_personality|group_summary|group_judge|back_to_main):"
+        pattern="^(direct_chat|setup_personality|group_summary|group_judge|back_to_main):"
     ))
 
     # Handle personality selection callbacks

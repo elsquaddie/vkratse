@@ -157,9 +157,16 @@ async def handle_start_menu_callback(update: Update, context: ContextTypes.DEFAU
             all_chats = db.get_all_chats()
 
             if not all_chats:
-                await query.message.reply_text(
+                # No chats yet - show button to add bot to a group
+                keyboard = [
+                    [InlineKeyboardButton("👥 Добавить в групповой чат", url=f"https://t.me/{config.BOT_USERNAME}?startgroup=true")],
+                    [InlineKeyboardButton("◀️ Назад", callback_data=sign_callback_data("back_to_main"))]
+                ]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                await query.edit_message_text(
                     "📭 Бот пока не добавлен ни в один чат.\n\n"
-                    "Добавь меня в групповой чат, чтобы я мог делать саммари!"
+                    "Добавь меня в групповой чат, чтобы я мог делать саммари!",
+                    reply_markup=reply_markup
                 )
                 return
 
@@ -172,9 +179,16 @@ async def handle_start_menu_callback(update: Update, context: ContextTypes.DEFAU
                     user_chats.append(chat)
 
             if not user_chats:
-                await query.message.reply_text(
+                # Bot is in some chats, but user is not a member of any
+                keyboard = [
+                    [InlineKeyboardButton("👥 Добавить в свой чат", url=f"https://t.me/{config.BOT_USERNAME}?startgroup=true")],
+                    [InlineKeyboardButton("◀️ Назад", callback_data=sign_callback_data("back_to_main"))]
+                ]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                await query.edit_message_text(
                     "📭 У нас нет общих чатов.\n\n"
-                    "Добавь меня в чат, где ты состоишь!"
+                    "Добавь меня в чат, где ты состоишь, чтобы я мог делать саммари!",
+                    reply_markup=reply_markup
                 )
                 return
 

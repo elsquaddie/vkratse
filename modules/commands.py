@@ -33,9 +33,10 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
     # Different buttons for private vs group chats
     if chat_type == ChatType.PRIVATE:
-        # Private chat: 3 buttons
+        # Private chat: 4 buttons
         keyboard = [
             [InlineKeyboardButton("💬 Общаться напрямую", callback_data=sign_callback_data("direct_chat"))],
+            [InlineKeyboardButton("📊 Саммари групп", callback_data=sign_callback_data("dm_summary"))],
             [InlineKeyboardButton("👥 Добавить в групповой чат", url=f"https://t.me/{config.BOT_USERNAME}?startgroup=true")],
             [InlineKeyboardButton("🎭 Настроить личность", callback_data=sign_callback_data("setup_personality"))]
         ]
@@ -78,9 +79,10 @@ async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, edi
 
     # Different buttons for private vs group chats
     if chat_type == ChatType.PRIVATE:
-        # Private chat: 3 buttons
+        # Private chat: 4 buttons
         keyboard = [
             [InlineKeyboardButton("💬 Общаться напрямую", callback_data=sign_callback_data("direct_chat"))],
+            [InlineKeyboardButton("📊 Саммари групп", callback_data=sign_callback_data("dm_summary"))],
             [InlineKeyboardButton("👥 Добавить в групповой чат", url=f"https://t.me/{config.BOT_USERNAME}?startgroup=true")],
             [InlineKeyboardButton("🎭 Настроить личность", callback_data=sign_callback_data("setup_personality"))]
         ]
@@ -107,6 +109,7 @@ async def handle_start_menu_callback(update: Update, context: ContextTypes.DEFAU
 
     Callbacks:
     - direct_chat: Show personality selection
+    - dm_summary: Show chat selection for summary in DM
     - setup_personality: Redirect to /lichnost
     - group_summary: Start summary in group
     - group_judge: Start judge in group
@@ -140,6 +143,71 @@ async def handle_start_menu_callback(update: Update, context: ContextTypes.DEFAU
         elif action == "setup_personality":
             # Redirect to personality selection (same as direct_chat for now)
             await direct_chat.show_personality_selection(update, context, edit_message=True, show_back_button=True)
+
+        elif action == "dm_summary":
+            # Show chat selection for summary in DM
+            from modules import summaries
+            from services import DBService
+
+            user = query.from_user
+            await query.edit_message_text("⏳ Загружаю список чатов...")
+
+            # Get all chats where bot is present
+            db = DBService()
+            all_chats = db.get_all_chats()
+
+            if not all_chats:
+                # No chats yet - show button to add bot to a group
+                keyboard = [
+                    [InlineKeyboardButton("👥 Добавить в групповой чат", url=f"https://t.me/{config.BOT_USERNAME}?startgroup=true")],
+                    [InlineKeyboardButton("◀️ Назад", callback_data=sign_callback_data("back_to_main"))]
+                ]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                await query.edit_message_text(
+                    "📭 Бот пока не добавлен ни в один чат.\n\n"
+                    "Добавь меня в групповой чат, чтобы я мог делать саммари!",
+                    reply_markup=reply_markup
+                )
+                return
+
+            # Filter chats where user is a member
+            from utils import validate_chat_access, create_signature
+            user_chats = []
+            for chat in all_chats:
+                ok, _ = await validate_chat_access(context.bot, chat.chat_id, user.id)
+                if ok:
+                    user_chats.append(chat)
+
+            if not user_chats:
+                # Bot is in some chats, but user is not a member of any
+                keyboard = [
+                    [InlineKeyboardButton("👥 Добавить в свой чат", url=f"https://t.me/{config.BOT_USERNAME}?startgroup=true")],
+                    [InlineKeyboardButton("◀️ Назад", callback_data=sign_callback_data("back_to_main"))]
+                ]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                await query.edit_message_text(
+                    "📭 У нас нет общих чатов.\n\n"
+                    "Добавь меня в чат, где ты состоишь, чтобы я мог делать саммари!",
+                    reply_markup=reply_markup
+                )
+                return
+
+            # Create inline buttons for each chat
+            keyboard = []
+            for chat in user_chats:
+                signature = create_signature(chat.chat_id, user.id)
+                callback_data = f"summary:{chat.chat_id}:{signature}"
+                button_text = f"{chat.emoji} {chat.chat_title or 'Чат'}"
+                keyboard.append([InlineKeyboardButton(button_text, callback_data=callback_data)])
+
+            # Add back button
+            keyboard.append([InlineKeyboardButton("◀️ Назад", callback_data=sign_callback_data("back_to_main"))])
+
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_text(
+                "📋 Выбери чат для саммари:",
+                reply_markup=reply_markup
+            )
 
         elif action == "group_summary":
             # Show instructions for /summary command with back button

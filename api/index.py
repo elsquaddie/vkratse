@@ -97,7 +97,7 @@ try:
         summary_timeframe_callback,
         back_to_summary_personality_callback
     )
-    from modules.judge import judge_command
+    from modules.judge import judge_command, handle_judge_personality_callback
     from modules.personalities import (
         personality_command,
         personality_callback,
@@ -265,6 +265,10 @@ def create_bot_application():
 
     # Judge command
     app.add_handler(CommandHandler(config.COMMAND_JUDGE, judge_command))
+    app.add_handler(CallbackQueryHandler(
+        handle_judge_personality_callback,
+        pattern="^judge_personality:"
+    ))
 
     # Personality command with conversation for creating/editing custom ones
     personality_conv = ConversationHandler(

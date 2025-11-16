@@ -11,7 +11,8 @@ from services import DBService, AIService
 from utils import (
     check_cooldown, set_cooldown,
     check_rate_limit,
-    extract_mentions
+    extract_mentions,
+    verify_signature, create_signature
 )
 
 
@@ -20,28 +21,26 @@ async def judge_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     Handle /рассуди command
 
     Examples:
-    /рассуди @вася says X, @петя says Y
-    /рассуди Кто прав насчёт Python?
+    /рассуди Дамирка и Настька поспорили о плоской земле. Кто прав?
+    /рассуди Ребята поругались насчёт Python vs JavaScript
     """
     user = update.effective_user
     chat = update.effective_chat
     db = DBService()
-    ai = AIService()
 
     logger.info(f"Judge command from user {user.id} in chat {chat.id}")
 
     # 1. Validate command is not empty
     if not context.args or len(context.args) == 0:
         await update.message.reply_text(
-            f"⚖️ Укажи участников спора!\n\n"
-            f"Используй:\n"
-            f"/{config.COMMAND_JUDGE} @user1 @user2 описание\n\n"
-            f"Пример:\n"
-            f"/{config.COMMAND_JUDGE} @ivan @petya Кто прав?"
+            f"⚖️ Опиши спор!\n\n"
+            f"Например:\n"
+            f"/{config.COMMAND_JUDGE} Дамирка и Настька поспорили о плоской земле. Кто прав?\n\n"
+            f"Я проанализирую контекст беседы и рассужу спор в выбранном стиле!"
         )
         return
 
-    # 2. Get dispute text
+    # 2. Get dispute description
     dispute_text = " ".join(context.args)
 
     # 3. Rate limit check
@@ -60,52 +59,115 @@ async def judge_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         )
         return
 
-    # 5. Extract mentioned users
-    mentioned_usernames = extract_mentions(dispute_text)
+    # 5. Save dispute description to context for callback handler
+    context.user_data['judge_dispute_text'] = dispute_text
+    context.user_data['judge_chat_id'] = chat.id
 
-    # 6. Get relevant messages
-    messages = []
-    if mentioned_usernames:
-        # Get messages from mentioned users
-        messages = db.get_messages_by_users(
-            chat_id=chat.id,
-            usernames=mentioned_usernames,
-            limit=20
-        )
-        logger.debug(f"Found {len(messages)} messages from mentioned users")
-    else:
-        # No mentions - get more recent messages for context analysis
-        messages = db.get_messages(
-            chat_id=chat.id,
-            limit=50  # Увеличил до 50 для лучшего контекста
-        )
+    # 6. Get current personality for ✓ indicator
+    current_personality = db.get_user_personality(user.id)
+
+    # 7. Show personality selection menu
+    from utils import build_personality_menu
+
+    keyboard = build_personality_menu(
+        user_id=user.id,
+        callback_prefix="judge_personality",
+        context="select",
+        current_personality=current_personality,
+        extra_callback_data={"chat_id": chat.id},
+        show_create_button=False  # Don't show create button in judge context
+    )
+
+    await update.message.reply_text(
+        "⚖️ Выбери стиль судейства:",
+        reply_markup=keyboard
+    )
+
+    logger.info(f"Showed personality menu for judge in chat {chat.id}")
+
+
+async def handle_judge_personality_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Handle personality selection callback for judge command
+
+    Callback format: judge_personality:<personality_id>:<chat_id>:<signature>
+    """
+    from utils.security import verify_callback_data
+
+    query = update.callback_query
+    await query.answer()
+
+    user = query.from_user
+    db = DBService()
+    ai = AIService()
+
+    try:
+        # Verify HMAC signature
+        if not verify_callback_data(query.data):
+            await query.edit_message_text("❌ Неверная подпись данных. Попробуй /start")
+            return
+
+        # Parse callback data: judge_personality:<personality_id>:<chat_id>:<signature>
+        parts = query.data.split(":")
+        if len(parts) < 4:
+            await query.edit_message_text("❌ Неверный формат данных")
+            return
+
+        personality_id = int(parts[1])
+        chat_id = int(parts[2])
+
+        # Get dispute description from context
+        dispute_text = context.user_data.get('judge_dispute_text')
+        if not dispute_text:
+            await query.edit_message_text(
+                "❌ Контекст спора потерян. Попробуй снова:\n"
+                f"/{config.COMMAND_JUDGE} <описание спора>"
+            )
+            return
+
+        # Get personality
+        personality = db.get_personality_by_id(personality_id)
+        if not personality:
+            logger.error(f"Personality {personality_id} not found")
+            await query.edit_message_text("❌ Личность не найдена")
+            return
+
+        # Get recent messages for context
+        messages = db.get_messages(chat_id=chat_id, limit=50)
         logger.debug(f"Using {len(messages)} recent messages for analysis")
 
-    # 7. Get user's personality
-    personality_name = db.get_user_personality(user.id)
-    personality = db.get_personality(personality_name)
+        # Update message to show processing
+        await query.edit_message_text(
+            f"⚖️ {personality.display_name} размышляет над спором...\n\n"
+            f"Спор: {dispute_text[:100]}{'...' if len(dispute_text) > 100 else ''}"
+        )
 
-    if not personality:
-        logger.error(f"Personality '{personality_name}' not found, using default")
-        personality = db.get_personality(config.DEFAULT_PERSONALITY)
+        # Generate verdict
+        verdict = ai.generate_judge_verdict(dispute_text, messages, personality)
 
-    # 8. Generate verdict
-    await update.message.reply_text("⚖️ Размышляю...")
+        # Send verdict
+        verdict_message = f"⚖️ ВЕРДИКТ от {personality.emoji} {personality.display_name}:\n\n{verdict}"
 
-    verdict = ai.generate_judge_verdict(dispute_text, messages, personality)
+        # Edit the message with verdict
+        await query.edit_message_text(verdict_message)
 
-    # 9. Send verdict
-    verdict_message = f"⚖️ ВЕРДИКТ:\n\n{verdict}"
-    await update.message.reply_text(verdict_message)
+        # Set cooldown
+        set_cooldown(chat_id, 'judge')
 
-    # 10. Set cooldown
-    set_cooldown(chat.id, 'judge')
+        # Log event
+        db.log_event(user.id, chat_id, 'judge', {
+            'dispute': dispute_text[:200],
+            'personality': personality.name
+        })
 
-    # 11. Log event
-    db.log_event(user.id, chat.id, 'judge', {
-        'dispute': dispute_text[:200],  # First 200 chars
-        'mentioned_users': mentioned_usernames,
-        'personality': personality_name
-    })
+        # Clear context
+        context.user_data.pop('judge_dispute_text', None)
+        context.user_data.pop('judge_chat_id', None)
 
-    logger.info(f"Generated verdict for chat {chat.id}")
+        logger.info(f"Generated verdict for chat {chat_id} with personality {personality.name}")
+
+    except Exception as e:
+        logger.error(f"Error in judge personality callback: {e}")
+        await query.edit_message_text(
+            "❌ Ошибка при генерации вердикта. Попробуй позже."
+        )

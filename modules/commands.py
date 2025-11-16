@@ -36,7 +36,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         # Private chat: 3 buttons
         keyboard = [
             [InlineKeyboardButton("💬 Общаться напрямую", callback_data=sign_callback_data("direct_chat"))],
-            [InlineKeyboardButton("👥 Добавить в групповой чат", callback_data=sign_callback_data("add_to_group"))],
+            [InlineKeyboardButton("👥 Добавить в групповой чат", url=f"https://t.me/{config.BOT_USERNAME}?startgroup=true")],
             [InlineKeyboardButton("🎭 Настроить личность", callback_data=sign_callback_data("setup_personality"))]
         ]
     else:
@@ -81,7 +81,7 @@ async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, edi
         # Private chat: 3 buttons
         keyboard = [
             [InlineKeyboardButton("💬 Общаться напрямую", callback_data=sign_callback_data("direct_chat"))],
-            [InlineKeyboardButton("👥 Добавить в групповой чат", callback_data=sign_callback_data("add_to_group"))],
+            [InlineKeyboardButton("👥 Добавить в групповой чат", url=f"https://t.me/{config.BOT_USERNAME}?startgroup=true")],
             [InlineKeyboardButton("🎭 Настроить личность", callback_data=sign_callback_data("setup_personality"))]
         ]
     else:
@@ -107,11 +107,12 @@ async def handle_start_menu_callback(update: Update, context: ContextTypes.DEFAU
 
     Callbacks:
     - direct_chat: Show personality selection
-    - add_to_group: Show instructions for adding bot to group
     - setup_personality: Redirect to /lichnost
     - group_summary: Start summary in group
     - group_judge: Start judge in group
     - back_to_main: Return to main menu
+
+    Note: 'add_to_group' is now a URL button (deep-link) and doesn't trigger callback
     """
     from utils.security import verify_callback_data
     from modules import direct_chat
@@ -135,29 +136,6 @@ async def handle_start_menu_callback(update: Update, context: ContextTypes.DEFAU
         elif action == "direct_chat":
             # Show personality selection menu
             await direct_chat.show_personality_selection(update, context, edit_message=True, show_back_button=True)
-
-        elif action == "add_to_group":
-            # Show group addition instructions with back button
-            text = f"""🎉 Добавь меня в свою группу!
-
-Я смогу:
-✅ Саммаризировать обсуждения
-✅ Рассуживать споры
-✅ Общаться в разных стилях
-
-💡 Чтобы добавить:
-1. Нажми на моё имя вверху
-2. Выбери "Add to Group"
-3. Выбери нужную группу
-
-После добавления используй команды:
-• /{config.COMMAND_SUMMARY} — саммаризировать чат
-• /{config.COMMAND_CHAT} — начать общение
-• /{config.COMMAND_JUDGE} — рассудить спор"""
-
-            keyboard = [[InlineKeyboardButton("◀️ Назад", callback_data=sign_callback_data("back_to_main"))]]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            await query.edit_message_text(text, reply_markup=reply_markup)
 
         elif action == "setup_personality":
             # Redirect to personality selection (same as direct_chat for now)

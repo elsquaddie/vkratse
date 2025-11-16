@@ -195,9 +195,13 @@ def _build_callback_data(
         return f"{callback_prefix}:{personality.name}"
 
     elif callback_prefix == "judge_personality":
-        # Format: "judge_personality:personality_name" (for /rassudi command)
-        # TODO: Add signature when judge personality selection is implemented
-        return f"{callback_prefix}:{personality.name}"
+        # Format: "judge_personality:<chat_id>:<personality_id>:<signature>"
+        chat_id = extra_data.get("chat_id") if extra_data else 0
+
+        callback_base = f"{chat_id}:{personality.id}"
+        signature = create_string_signature(callback_base, user_id)
+
+        return f"{callback_prefix}:{callback_base}:{signature}"
 
     else:
         # Default fallback

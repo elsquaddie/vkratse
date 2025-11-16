@@ -30,14 +30,21 @@ async def judge_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
     logger.info(f"Judge command from user {user.id} in chat {chat.id}")
 
-    # 1. Get dispute text or use auto-analysis
-    if context.args:
-        dispute_text = " ".join(context.args)
-    else:
-        # No explicit dispute - analyze chat context automatically
-        dispute_text = None
+    # 1. Validate command is not empty
+    if not context.args or len(context.args) == 0:
+        await update.message.reply_text(
+            f"⚖️ Укажи участников спора!\n\n"
+            f"Используй:\n"
+            f"/{config.COMMAND_JUDGE} @user1 @user2 описание\n\n"
+            f"Пример:\n"
+            f"/{config.COMMAND_JUDGE} @ivan @petya Кто прав?"
+        )
+        return
 
-    # 2. Rate limit check
+    # 2. Get dispute text
+    dispute_text = " ".join(context.args)
+
+    # 3. Rate limit check
     ok, remaining = check_rate_limit(user.id)
     if not ok:
         await update.message.reply_text(
@@ -45,7 +52,7 @@ async def judge_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         )
         return
 
-    # 3. Cooldown check
+    # 4. Cooldown check
     ok, remaining = check_cooldown(chat.id, 'judge')
     if not ok:
         await update.message.reply_text(
@@ -53,10 +60,10 @@ async def judge_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         )
         return
 
-    # 4. Extract mentioned users (if dispute_text provided)
-    mentioned_usernames = extract_mentions(dispute_text) if dispute_text else []
+    # 5. Extract mentioned users
+    mentioned_usernames = extract_mentions(dispute_text)
 
-    # 5. Get relevant messages
+    # 6. Get relevant messages
     messages = []
     if mentioned_usernames:
         # Get messages from mentioned users
@@ -74,7 +81,7 @@ async def judge_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         )
         logger.debug(f"Using {len(messages)} recent messages for analysis")
 
-    # 6. Get user's personality
+    # 7. Get user's personality
     personality_name = db.get_user_personality(user.id)
     personality = db.get_personality(personality_name)
 
@@ -82,19 +89,19 @@ async def judge_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         logger.error(f"Personality '{personality_name}' not found, using default")
         personality = db.get_personality(config.DEFAULT_PERSONALITY)
 
-    # 7. Generate verdict
+    # 8. Generate verdict
     await update.message.reply_text("⚖️ Размышляю...")
 
     verdict = ai.generate_judge_verdict(dispute_text, messages, personality)
 
-    # 8. Send verdict
+    # 9. Send verdict
     verdict_message = f"⚖️ ВЕРДИКТ:\n\n{verdict}"
     await update.message.reply_text(verdict_message)
 
-    # 9. Set cooldown
+    # 10. Set cooldown
     set_cooldown(chat.id, 'judge')
 
-    # 10. Log event
+    # 11. Log event
     db.log_event(user.id, chat.id, 'judge', {
         'dispute': dispute_text[:200],  # First 200 chars
         'mentioned_users': mentioned_usernames,

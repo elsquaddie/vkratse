@@ -63,17 +63,14 @@ async def judge_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     context.user_data['judge_dispute_text'] = dispute_text
     context.user_data['judge_chat_id'] = chat.id
 
-    # 6. Get current personality for ✓ indicator
-    current_personality = db.get_user_personality(user.id)
-
-    # 7. Show personality selection menu
+    # 6. Show personality selection menu
     from utils import build_personality_menu
 
     keyboard = build_personality_menu(
         user_id=user.id,
         callback_prefix="judge_personality",
         context="select",
-        current_personality=current_personality,
+        current_personality=None,  # No default selection - user must choose
         extra_callback_data={"chat_id": chat.id},
         show_create_button=False  # Don't show create button in judge context
     )
@@ -90,9 +87,9 @@ async def handle_judge_personality_callback(update: Update, context: ContextType
     """
     Handle personality selection callback for judge command
 
-    Callback format: judge_personality:<personality_id>:<chat_id>:<signature>
+    Callback format: judge_personality:<chat_id>:<personality_id>:<signature>
     """
-    from utils.security import verify_callback_data
+    from utils.security import verify_string_signature
 
     query = update.callback_query
     await query.answer()
@@ -102,19 +99,21 @@ async def handle_judge_personality_callback(update: Update, context: ContextType
     ai = AIService()
 
     try:
-        # Verify HMAC signature
-        if not verify_callback_data(query.data):
-            await query.edit_message_text("❌ Неверная подпись данных. Попробуй /start")
-            return
-
-        # Parse callback data: judge_personality:<personality_id>:<chat_id>:<signature>
+        # Parse callback data: judge_personality:<chat_id>:<personality_id>:<signature>
         parts = query.data.split(":")
-        if len(parts) < 4:
+        if len(parts) != 4:
             await query.edit_message_text("❌ Неверный формат данных")
             return
 
-        personality_id = int(parts[1])
-        chat_id = int(parts[2])
+        _, chat_id_str, personality_id_str, signature = parts
+        chat_id = int(chat_id_str)
+        personality_id = int(personality_id_str)
+
+        # Verify HMAC signature
+        callback_base = f"{chat_id}:{personality_id}"
+        if not verify_string_signature(callback_base, user.id, signature):
+            await query.edit_message_text("❌ Неверная подпись данных. Попробуй /start")
+            return
 
         # Get dispute description from context
         dispute_text = context.user_data.get('judge_dispute_text')

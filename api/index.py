@@ -94,7 +94,8 @@ try:
         summary_command,
         summary_callback,
         summary_personality_callback,
-        summary_timeframe_callback
+        summary_timeframe_callback,
+        back_to_summary_personality_callback
     )
     from modules.judge import judge_command
     from modules.personalities import (
@@ -265,6 +266,10 @@ def create_bot_application():
         summary_timeframe_callback,
         pattern="^summary_timeframe:"
     ))
+    app.add_handler(CallbackQueryHandler(
+        back_to_summary_personality_callback,
+        pattern="^back_to_summary_personality:"
+    ))
 
     # Chat commands (group chat sessions)
     app.add_handler(CommandHandler(config.COMMAND_CHAT, chat_command))
@@ -312,7 +317,7 @@ def create_bot_application():
     # Handle /start menu callbacks
     app.add_handler(CallbackQueryHandler(
         handle_start_menu_callback,
-        pattern="^(direct_chat|add_to_group|setup_personality):"
+        pattern="^(direct_chat|add_to_group|setup_personality|group_summary|group_judge|back_to_main):"
     ))
 
     # Handle personality selection callbacks

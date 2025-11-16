@@ -31,6 +31,8 @@ def _build_timeframe_menu(user_id: int, chat_id: int, personality_id: int) -> In
     Returns:
         InlineKeyboardMarkup with timeframe buttons
     """
+    from utils.security import sign_callback_data
+
     timeframes = [
         ("📝 50 сообщений", "50"),
         ("📝 100 сообщений", "100"),
@@ -62,6 +64,17 @@ def _build_timeframe_menu(user_id: int, chat_id: int, personality_id: int) -> In
     # Add last row if odd number
     if row:
         keyboard.append(row)
+
+    # Add back button to return to personality selection
+    # Callback format: back_to_summary_personality:<chat_id>:<signature>
+    back_callback_base = f"{chat_id}"
+    back_signature = create_signature(back_callback_base, user_id)
+    back_callback = f"back_to_summary_personality:{back_callback_base}:{back_signature}"
+
+    keyboard.append([InlineKeyboardButton(
+        "◀️ Назад",
+        callback_data=back_callback
+    )])
 
     return InlineKeyboardMarkup(keyboard)
 
@@ -471,3 +484,51 @@ async def _execute_summary(
             f"❌ Ошибка при генерации саммари. Попробуй позже.\n\n"
             f"Детали: {str(e)[:100]}"
         )
+
+
+async def back_to_summary_personality_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Handle back button from timeframe menu to return to personality selection.
+
+    Callback data format: back_to_summary_personality:<chat_id>:<signature>
+    """
+    query = update.callback_query
+    user = query.from_user
+    db = DBService()
+
+    await query.answer()
+
+    # Parse callback data
+    try:
+        _, chat_id_str, signature = query.data.split(':')
+        chat_id = int(chat_id_str)
+    except (ValueError, IndexError) as e:
+        await query.message.edit_text("❌ Неверные данные кнопки")
+        logger.error(f"Error parsing back_to_summary_personality callback: {e}")
+        return
+
+    # Verify signature
+    callback_base = f"{chat_id}"
+    if not verify_signature(callback_base, user.id, signature):
+        await query.message.edit_text("❌ Неверная подпись. Попробуй заново.")
+        return
+
+    # Get current personality for ✓ indicator
+    current_personality = db.get_user_personality(user.id)
+
+    # Show personality selection menu again
+    keyboard = build_personality_menu(
+        user_id=user.id,
+        callback_prefix="summary_personality",
+        context="select",
+        current_personality=current_personality,
+        extra_callback_data={"chat_id": chat_id, "limit": "none"},
+        show_create_button=False
+    )
+
+    await query.message.edit_text(
+        "🎭 Выбери личность для саммари:",
+        reply_markup=keyboard
+    )
+
+    logger.info(f"User {user.id} returned to personality selection for summary in chat {chat_id}")

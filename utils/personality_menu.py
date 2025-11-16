@@ -15,7 +15,9 @@ def build_personality_menu(
     context: str = "select",
     current_personality: Optional[str] = None,
     extra_callback_data: Optional[Dict[str, Any]] = None,
-    show_create_button: bool = True
+    show_create_button: bool = True,
+    show_back_button: bool = False,
+    back_callback: str = "back_to_main"
 ) -> InlineKeyboardMarkup:
     """
     Build universal personality selection menu with consistent UX.
@@ -27,6 +29,8 @@ def build_personality_menu(
         current_personality: Name of currently selected personality (for ✓ indicator)
         extra_callback_data: Extra data to include in callback (e.g., {"chat_id": 123, "limit": "50"})
         show_create_button: Whether to show "Create personality" button
+        show_back_button: Whether to show "Back" button
+        back_callback: Callback data for back button (default: "back_to_main")
 
     Returns:
         InlineKeyboardMarkup with personality selection buttons
@@ -49,6 +53,8 @@ def build_personality_menu(
             extra_callback_data={"chat_id": 456, "limit": "none"}
         )
     """
+    from utils.security import sign_callback_data
+
     db = DBService()
     keyboard = []
 
@@ -131,6 +137,13 @@ def build_personality_menu(
         keyboard.append([InlineKeyboardButton(
             "➕ Создать свою личность",
             callback_data="pers:create_start"
+        )])
+
+    # 6. Back button
+    if show_back_button:
+        keyboard.append([InlineKeyboardButton(
+            "◀️ Назад",
+            callback_data=sign_callback_data(back_callback)
         )])
 
     return InlineKeyboardMarkup(keyboard)

@@ -7,6 +7,8 @@ from .security import (
     verify_signature,
     create_string_signature,
     verify_string_signature,
+    create_group_signature,
+    verify_group_signature,
     sanitize_personality_prompt,
     extract_user_description
 )
@@ -21,6 +23,8 @@ __all__ = [
     'verify_signature',
     'create_string_signature',
     'verify_string_signature',
+    'create_group_signature',
+    'verify_group_signature',
     'sanitize_personality_prompt',
     'extract_user_description',
     'check_cooldown',

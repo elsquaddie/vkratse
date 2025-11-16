@@ -296,21 +296,29 @@ async def summary_personality_callback(update: Update, context: ContextTypes.DEF
 
     # Parse callback data
     try:
+        logger.info(f"[SIGNATURE CHECK] Parsing callback_data: '{query.data}' from user {user.id}")
         _, chat_id_str, personality_id_str, custom_limit, signature = query.data.split(':')
         chat_id = int(chat_id_str)
         personality_id = int(personality_id_str)
+        logger.info(f"[SIGNATURE CHECK] Parsed: chat_id={chat_id}, personality_id={personality_id}, limit={custom_limit}, signature={signature}")
     except (ValueError, IndexError) as e:
         await query.message.reply_text("❌ Неверные данные кнопки")
         logger.error(f"Error parsing personality callback: {e}")
         return
 
-    # Verify signature
-    callback_base = f"{chat_id}:{personality_id}:{custom_limit}"
+    # Verify signature (using group signature - no user_id check)
+    # NOTE: We use verify_group_signature because in groups, ANY member can click the button
+    from utils.security import verify_group_signature
 
-    if not verify_string_signature(callback_base, user.id, signature):
+    callback_base = f"{chat_id}:{personality_id}:{custom_limit}"
+    logger.info(f"[SIGNATURE CHECK] Verifying GROUP signature: callback_base='{callback_base}', received_signature={signature}")
+
+    if not verify_group_signature(callback_base, signature):
         await query.message.reply_text("❌ Неверная подпись. Попробуй заново.")
-        logger.error(f"Signature verification failed for summary_personality")
+        logger.error(f"[SIGNATURE CHECK] FAILED for summary_personality: callback_base='{callback_base}', signature={signature}")
         return
+
+    logger.info(f"[SIGNATURE CHECK] SUCCESS for summary_personality")
 
     # Get personality
     personality = db.get_personality_by_id(personality_id)

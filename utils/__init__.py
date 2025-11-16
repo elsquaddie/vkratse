@@ -5,6 +5,8 @@ Utility functions
 from .security import (
     create_signature,
     verify_signature,
+    create_string_signature,
+    verify_string_signature,
     sanitize_personality_prompt,
     extract_user_description
 )
@@ -17,6 +19,8 @@ from .personality_menu import build_personality_menu, get_current_personality_di
 __all__ = [
     'create_signature',
     'verify_signature',
+    'create_string_signature',
+    'verify_string_signature',
     'sanitize_personality_prompt',
     'extract_user_description',
     'check_cooldown',

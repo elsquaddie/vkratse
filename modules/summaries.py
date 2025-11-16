@@ -13,6 +13,7 @@ from utils import (
     check_cooldown, set_cooldown,
     check_rate_limit,
     create_signature, verify_signature,
+    create_string_signature, verify_string_signature,
     validate_chat_access,
     parse_time_argument, get_default_period,
     build_personality_menu
@@ -51,7 +52,7 @@ def _build_timeframe_menu(user_id: int, chat_id: int, personality_id: int) -> In
     for label, value in timeframes:
         # Callback format: summary_timeframe:<chat_id>:<personality_id>:<timeframe>:<signature>
         callback_base = f"{chat_id}:{personality_id}:{value}"
-        signature = create_signature(callback_base, user_id)
+        signature = create_string_signature(callback_base, user_id)
         callback_data = f"summary_timeframe:{callback_base}:{signature}"
 
         row.append(InlineKeyboardButton(label, callback_data=callback_data))
@@ -68,7 +69,7 @@ def _build_timeframe_menu(user_id: int, chat_id: int, personality_id: int) -> In
     # Add back button to return to personality selection
     # Callback format: back_to_summary_personality:<chat_id>:<signature>
     back_callback_base = f"{chat_id}"
-    back_signature = create_signature(back_callback_base, user_id)
+    back_signature = create_string_signature(back_callback_base, user_id)
     back_callback = f"back_to_summary_personality:{back_callback_base}:{back_signature}"
 
     keyboard.append([InlineKeyboardButton(
@@ -135,15 +136,14 @@ async def _summary_in_group(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             )
             return
 
-    # 4. Get current personality for ✓ indicator
-    current_personality = db.get_user_personality(user.id)
-
-    # 5. Show personality selection menu using universal builder
+    # 4. Show personality selection menu using universal builder
+    # Note: We don't pass current_personality to avoid confusing checkmark
+    # in summary context (user's default personality is for direct chat)
     keyboard = build_personality_menu(
         user_id=user.id,
         callback_prefix="summary_personality",
         context="select",
-        current_personality=current_personality,
+        current_personality=None,  # No checkmark in summary context
         extra_callback_data={"chat_id": chat.id, "limit": custom_limit or "none"},
         show_create_button=False  # Don't show create button in summary context
     )
@@ -313,8 +313,9 @@ async def summary_personality_callback(update: Update, context: ContextTypes.DEF
 
     # Verify signature
     callback_base = f"{chat_id}:{personality_id}:{custom_limit}"
-    if not verify_signature(callback_base, user.id, signature):
+    if not verify_string_signature(callback_base, user.id, signature):
         await query.message.reply_text("❌ Неверная подпись. Попробуй заново.")
+        logger.error(f"Invalid signature for summary_personality: callback_base='{callback_base}', user_id={user.id}")
         return
 
     # Get personality
@@ -378,8 +379,9 @@ async def summary_timeframe_callback(update: Update, context: ContextTypes.DEFAU
 
     # Verify signature
     callback_base = f"{chat_id}:{personality_id}:{timeframe}"
-    if not verify_signature(callback_base, user.id, signature):
+    if not verify_string_signature(callback_base, user.id, signature):
         await query.message.reply_text("❌ Неверная подпись. Попробуй заново.")
+        logger.error(f"Invalid signature for summary_timeframe: callback_base='{callback_base}', user_id={user.id}")
         return
 
     # Get personality
@@ -509,19 +511,18 @@ async def back_to_summary_personality_callback(update: Update, context: ContextT
 
     # Verify signature
     callback_base = f"{chat_id}"
-    if not verify_signature(callback_base, user.id, signature):
+    if not verify_string_signature(callback_base, user.id, signature):
         await query.message.edit_text("❌ Неверная подпись. Попробуй заново.")
+        logger.error(f"Invalid signature for back_to_summary_personality: callback_base='{callback_base}', user_id={user.id}")
         return
 
-    # Get current personality for ✓ indicator
-    current_personality = db.get_user_personality(user.id)
-
     # Show personality selection menu again
+    # Note: We don't pass current_personality to avoid confusing checkmark
     keyboard = build_personality_menu(
         user_id=user.id,
         callback_prefix="summary_personality",
         context="select",
-        current_personality=current_personality,
+        current_personality=None,  # No checkmark in summary context
         extra_callback_data={"chat_id": chat_id, "limit": "none"},
         show_create_button=False
     )

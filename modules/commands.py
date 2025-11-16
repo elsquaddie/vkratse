@@ -5,6 +5,7 @@ Basic bot commands
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
+from telegram.constants import ChatType
 import config
 from config import logger
 from utils.security import sign_callback_data
@@ -16,6 +17,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     Show welcome message with inline menu for action selection
     """
     user = update.effective_user
+    chat_type = update.effective_chat.type
 
     # Unified welcome message for all chat types
     welcome_text = f"""👋 Привет, {user.first_name}!
@@ -29,14 +31,24 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 Что будем делать?"""
 
-    # Build inline keyboard
-    keyboard = [
-        [InlineKeyboardButton("💬 Общаться напрямую", callback_data=sign_callback_data("direct_chat"))],
-        [InlineKeyboardButton("👥 Добавить в групповой чат", callback_data=sign_callback_data("add_to_group"))],
-        [InlineKeyboardButton("🎭 Настроить личность", callback_data=sign_callback_data("setup_personality"))]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
+    # Different buttons for private vs group chats
+    if chat_type == ChatType.PRIVATE:
+        # Private chat: 3 buttons
+        keyboard = [
+            [InlineKeyboardButton("💬 Общаться напрямую", callback_data=sign_callback_data("direct_chat"))],
+            [InlineKeyboardButton("👥 Добавить в групповой чат", callback_data=sign_callback_data("add_to_group"))],
+            [InlineKeyboardButton("🎭 Настроить личность", callback_data=sign_callback_data("setup_personality"))]
+        ]
+    else:
+        # Group chat: 4 buttons
+        keyboard = [
+            [InlineKeyboardButton("📝 Сделать саммари", callback_data=sign_callback_data("group_summary"))],
+            [InlineKeyboardButton("💬 Общаться напрямую", callback_data=sign_callback_data("direct_chat"))],
+            [InlineKeyboardButton("⚖️ Рассудить", callback_data=sign_callback_data("group_judge"))],
+            [InlineKeyboardButton("🎭 Настроить личность", callback_data=sign_callback_data("setup_personality"))]
+        ]
 
+    reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text(welcome_text, reply_markup=reply_markup)
 
 
@@ -48,6 +60,8 @@ async def handle_start_menu_callback(update: Update, context: ContextTypes.DEFAU
     - direct_chat: Show personality selection
     - add_to_group: Show instructions for adding bot to group
     - setup_personality: Redirect to /lichnost
+    - group_summary: Start summary in group
+    - group_judge: Start judge in group
     """
     from utils.security import verify_callback_data
     from modules import direct_chat
@@ -92,6 +106,37 @@ async def handle_start_menu_callback(update: Update, context: ContextTypes.DEFAU
         elif action == "setup_personality":
             # Redirect to personality selection (same as direct_chat for now)
             await direct_chat.show_personality_selection(update, context, edit_message=True)
+
+        elif action == "group_summary":
+            # Show instructions for /summary command
+            text = f"""📝 Сделать саммари
+
+Чтобы я создал саммари обсуждения, используй команду:
+
+/{config.COMMAND_SUMMARY}
+
+Опционально можно указать количество сообщений:
+/{config.COMMAND_SUMMARY} 100 — последние 100 сообщений
+/{config.COMMAND_SUMMARY} 200 — последние 200 сообщений
+
+Я предложу выбрать личность для саммари и подведу итоги обсуждения! 🎭"""
+
+            await query.edit_message_text(text)
+
+        elif action == "group_judge":
+            # Show instructions for /rassudi command
+            text = f"""⚖️ Рассудить спор
+
+Чтобы я рассудил спор, используй команду:
+
+/{config.COMMAND_JUDGE} @user1 @user2 описание спора
+
+Пример:
+/{config.COMMAND_JUDGE} @ivan @petya Кто прав насчет выбора фреймворка?
+
+Я проанализирую последние сообщения участников и вынесу вердикт в выбранном стиле личности! 🎭"""
+
+            await query.edit_message_text(text)
 
         else:
             await query.edit_message_text("❌ Неизвестное действие. Попробуй /start")

@@ -209,22 +209,17 @@ async def handle_start_menu_callback(update: Update, context: ContextTypes.DEFAU
 
         elif action == "group_summary":
             # Show personality selection menu directly (no instructions)
-            from services import DBService
             from utils import build_personality_menu
 
             user = query.from_user
-            db = DBService()
             chat_id = update.effective_chat.id
-
-            # Get current personality for ✓ indicator
-            current_personality = db.get_user_personality(user.id)
 
             # Build personality menu using universal builder
             keyboard = build_personality_menu(
                 user_id=user.id,
                 callback_prefix="summary_personality",
                 context="select",
-                current_personality=current_personality,
+                current_personality=None,  # No checkmark - user must choose
                 extra_callback_data={"chat_id": chat_id, "limit": "none"},
                 show_create_button=False,  # Don't show create button in summary context
                 show_back_button=True  # Show back button to return to main menu

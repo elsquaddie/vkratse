@@ -4,6 +4,7 @@ Handles 1-on-1 conversations with the bot in private chats
 """
 
 from typing import Optional
+from datetime import datetime, timedelta
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from telegram.constants import ChatType
@@ -36,25 +37,16 @@ async def show_personality_selection(
     """
     try:
         user_id = update.effective_user.id
-        logger.info(f"🔍 [PERSONALITY_SELECT] Starting personality selection for user {user_id}")
 
         # Get all personalities (base + user's custom)
-        logger.info(f"🔍 [PERSONALITY_SELECT] Fetching all personalities from DB...")
         all_personalities = db_service.get_all_personalities()
-        logger.info(f"🔍 [PERSONALITY_SELECT] Got {len(all_personalities)} personalities from DB")
 
         # Separate base and custom personalities
         base_personalities = [p for p in all_personalities if not p.is_custom]
         custom_personalities = [p for p in all_personalities if p.is_custom and p.created_by_user_id == user_id]
-        logger.info(f"🔍 [PERSONALITY_SELECT] Base: {len(base_personalities)}, Custom: {len(custom_personalities)}")
-
-        # Log each personality for debugging
-        for p in base_personalities:
-            logger.info(f"🔍 [PERSONALITY_SELECT] Base personality: name={p.name}, emoji={repr(p.emoji)}, display_name={p.display_name}")
 
         # Build inline keyboard (2 columns layout)
         keyboard = []
-        logger.info(f"🔍 [PERSONALITY_SELECT] Building keyboard...")
 
         # Add base personalities in rows of 2
         for i in range(0, len(base_personalities), 2):
@@ -62,15 +54,12 @@ async def show_personality_selection(
             for j in range(2):
                 if i + j < len(base_personalities):
                     p = base_personalities[i + j]
-                    logger.info(f"🔍 [PERSONALITY_SELECT] Adding button for {p.name} (ID: {p.id}): emoji={repr(p.emoji)}")
                     callback_data = sign_callback_data(f"sel_pers:{p.id}")
                     row.append(InlineKeyboardButton(
                         f"{p.emoji} {p.display_name}",
                         callback_data=callback_data
                     ))
             keyboard.append(row)
-
-        logger.info(f"🔍 [PERSONALITY_SELECT] Keyboard built with {len(keyboard)} rows")
 
         # Add custom personalities
         if custom_personalities:
@@ -116,7 +105,6 @@ async def show_personality_selection(
 
 Каждая личность имеет свой уникальный стиль и подход к разговору."""
 
-        logger.info(f"🔍 [PERSONALITY_SELECT] Sending message to user...")
         if edit_message and update.callback_query:
             await update.callback_query.edit_message_text(
                 text=text,
@@ -128,12 +116,8 @@ async def show_personality_selection(
                 reply_markup=reply_markup
             )
 
-        logger.info(f"✅ [PERSONALITY_SELECT] Successfully showed personality selection to user {user_id}")
-
     except Exception as e:
-        logger.error(f"❌ [PERSONALITY_SELECT] Error showing personality selection: {e}")
-        logger.error(f"❌ [PERSONALITY_SELECT] Error type: {type(e).__name__}")
-        logger.error(f"❌ [PERSONALITY_SELECT] Error traceback:", exc_info=True)
+        logger.error(f"Error showing personality selection: {e}", exc_info=True)
         await update.effective_message.reply_text(
             "❌ Ошибка при загрузке личностей. Попробуй /start"
         )
@@ -199,8 +183,6 @@ async def handle_personality_selection(
             metadata={"personality": personality.name}
         )
 
-        logger.info(f"User {user_id} selected personality '{personality.name}'")
-
     except Exception as e:
         logger.error(f"Error handling personality selection: {e}")
         await query.edit_message_text(
@@ -232,7 +214,7 @@ async def handle_direct_message(
     try:
         # Check if user has selected a personality
         personality_name = db_service.get_user_personality(user_id)
-        if not personality_name or personality_name == config.DEFAULT_PERSONALITY:
+        if not personality_name:
             await update.message.reply_text(
                 "🎭 Сначала выбери личность для общения!\n\n"
                 f"Используй команду /{config.COMMAND_PERSONALITY} чтобы выбрать стиль общения."
@@ -283,8 +265,6 @@ async def handle_direct_message(
             metadata={"personality": personality_name}
         )
 
-        logger.info(f"Handled direct message from user {user_id} with personality '{personality_name}'")
-
     except Exception as e:
         logger.error(f"Error handling direct message: {e}")
         await update.message.reply_text(
@@ -312,16 +292,57 @@ async def chat_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         )
         return
 
-    # Check if user already has an active session
-    # TODO: Implement session management
+    try:
+        # Get all personalities (base + user's custom)
+        all_personalities = db_service.get_all_personalities()
 
-    # Show personality selection for group chat
-    await update.message.reply_text(
-        f"🎭 Выбери личность для общения в этом чате:\n\n"
-        f"(Функция в разработке - пока используй /{config.COMMAND_SUMMARY})"
-    )
+        # Separate base and custom personalities
+        base_personalities = [p for p in all_personalities if not p.is_custom]
+        custom_personalities = [p for p in all_personalities if p.is_custom and p.created_by_user_id == user.id]
 
-    logger.info(f"User {user.id} requested /chat in group {chat.id}")
+        # Build inline keyboard (2 columns layout)
+        keyboard = []
+
+        # Add base personalities in rows of 2
+        for i in range(0, len(base_personalities), 2):
+            row = []
+            for j in range(2):
+                if i + j < len(base_personalities):
+                    p = base_personalities[i + j]
+                    # Format: start_chat_session:personality_id:user_id
+                    callback_data = sign_callback_data(f"start_chat:{p.id}:{user.id}")
+                    row.append(InlineKeyboardButton(
+                        f"{p.emoji} {p.display_name}",
+                        callback_data=callback_data
+                    ))
+            keyboard.append(row)
+
+        # Add custom personalities
+        if custom_personalities:
+            for i in range(0, len(custom_personalities), 2):
+                row = []
+                for j in range(2):
+                    if i + j < len(custom_personalities):
+                        p = custom_personalities[i + j]
+                        callback_data = sign_callback_data(f"start_chat:{p.id}:{user.id}")
+                        row.append(InlineKeyboardButton(
+                            f"{p.emoji} {p.display_name}",
+                            callback_data=callback_data
+                        ))
+                keyboard.append(row)
+
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
+        # Build text
+        text = "🎭 Выбери личность для общения в этом чате:\n\n💬 После выбора я буду отвечать только на твои сообщения (через reply или @упоминание)"
+
+        await update.message.reply_text(text, reply_markup=reply_markup)
+
+    except Exception as e:
+        logger.error(f"Error in chat_command: {e}")
+        await update.message.reply_text(
+            "❌ Ошибка при загрузке личностей. Попробуй ещё раз."
+        )
 
 
 async def stop_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -342,13 +363,220 @@ async def stop_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         )
         return
 
-    # TODO: Implement session termination
-    await update.message.reply_text(
-        "✅ Сессия завершена.\n\n"
-        "(Функция в разработке)"
+    # Check if session exists
+    if 'group_chat_sessions' not in context.bot_data:
+        await update.message.reply_text(
+            f"❌ У тебя нет активной сессии.\n"
+            f"Начни сессию: /{config.COMMAND_CHAT}"
+        )
+        return
+
+    session_key = (chat.id, user.id)
+    session = context.bot_data['group_chat_sessions'].get(session_key)
+
+    if not session:
+        await update.message.reply_text(
+            f"❌ У тебя нет активной сессии.\n"
+            f"Начни сессию: /{config.COMMAND_CHAT}"
+        )
+        return
+
+    # End session
+    del context.bot_data['group_chat_sessions'][session_key]
+
+    # Log analytics
+    db_service.log_event(
+        user_id=user.id,
+        chat_id=chat.id,
+        event_type="group_chat_session_ended",
+        metadata={"personality": session['personality']}
     )
 
-    logger.info(f"User {user.id} ended chat session in group {chat.id}")
+    await update.message.reply_text(
+        f"✅ Сессия завершена.\n\n"
+        f"Начать новую: /{config.COMMAND_CHAT}"
+    )
+
+
+async def handle_start_chat_callback(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """
+    Handle callback when user selects personality for group chat session.
+    Creates an active session and sends greeting message.
+
+    Args:
+        update: Telegram update object
+        context: Bot context
+    """
+    query = update.callback_query
+    await query.answer()
+
+    try:
+        # Verify HMAC signature
+        if not verify_callback_data(query.data):
+            await query.edit_message_text("❌ Неверная подпись данных.")
+            return
+
+        # Extract callback data (format: "start_chat:personality_id:user_id:HMAC")
+        parts = query.data.split(":")
+        if len(parts) < 3:
+            await query.edit_message_text("❌ Неверный формат данных.")
+            return
+
+        personality_id = int(parts[1])
+        expected_user_id = int(parts[2])
+        actual_user_id = query.from_user.id
+        chat_id = query.message.chat_id
+
+        # Security check: ensure the callback is from the same user who initiated /chat
+        if actual_user_id != expected_user_id:
+            await query.answer("❌ Эта кнопка предназначена для другого пользователя.", show_alert=True)
+            return
+
+        # Get personality from DB
+        personality = db_service.get_personality_by_id(personality_id)
+        if not personality:
+            await query.edit_message_text("❌ Личность не найдена.")
+            return
+
+        # Create active session in bot_data (in-memory storage)
+        # Format: context.bot_data['group_chat_sessions'] = {(chat_id, user_id): {'personality': name, 'started_at': timestamp}}
+        if 'group_chat_sessions' not in context.bot_data:
+            context.bot_data['group_chat_sessions'] = {}
+
+        session_key = (chat_id, actual_user_id)
+        context.bot_data['group_chat_sessions'][session_key] = {
+            'personality': personality.name,
+            'started_at': datetime.now()
+        }
+
+        # Generate greeting
+        greeting = personality.greeting_message
+        if not greeting:
+            greeting = ai_service.generate_greeting(personality)
+
+        # Send session started message
+        response_text = (
+            f"✅ Начата сессия общения с {personality.display_name} {personality.emoji}\n\n"
+            f"{greeting}\n\n"
+            f"💬 Пиши мне через reply на мои сообщения или @упоминание.\n"
+            f"⏱️ Сессия автоматически завершится через {config.DIRECT_CHAT_SESSION_TIMEOUT // 60} минут.\n"
+            f"🛑 Завершить вручную: /{config.COMMAND_STOP}"
+        )
+
+        await query.edit_message_text(response_text)
+
+        # Log analytics
+        db_service.log_event(
+            user_id=actual_user_id,
+            chat_id=chat_id,
+            event_type="group_chat_session_started",
+            metadata={"personality": personality.name}
+        )
+
+    except Exception as e:
+        logger.error(f"Error handling start_chat callback: {e}")
+        await query.edit_message_text(
+            "❌ Ошибка при создании сессии. Попробуй ещё раз."
+        )
+
+
+async def handle_group_chat_message(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """
+    Handle messages in group chats during active chat sessions.
+    Only responds to messages from users with active sessions.
+
+    Args:
+        update: Telegram update object
+        context: Bot context
+    """
+    # Only handle group messages
+    if update.effective_chat.type not in [ChatType.GROUP, ChatType.SUPERGROUP]:
+        return
+
+    user_id = update.effective_user.id
+    chat_id = update.effective_chat.id
+    message = update.message
+
+    # Check if there's an active session
+    if 'group_chat_sessions' not in context.bot_data:
+        return
+
+    session_key = (chat_id, user_id)
+    session = context.bot_data['group_chat_sessions'].get(session_key)
+
+    if not session:
+        # No active session for this user
+        return
+
+    # Check session timeout (15 minutes)
+    session_age = datetime.now() - session['started_at']
+    if session_age > timedelta(seconds=config.DIRECT_CHAT_SESSION_TIMEOUT):
+        # Session expired
+        del context.bot_data['group_chat_sessions'][session_key]
+        await message.reply_text(
+            f"⏱️ Сессия завершена (таймаут {config.DIRECT_CHAT_SESSION_TIMEOUT // 60} минут).\n"
+            f"Начни новую: /{config.COMMAND_CHAT}"
+        )
+        return
+
+    # Check if message is addressed to bot (reply or mention)
+    is_reply_to_bot = (
+        message.reply_to_message and
+        message.reply_to_message.from_user and
+        message.reply_to_message.from_user.id == context.bot.id
+    )
+    is_mention = f"@{context.bot.username}" in message.text if message.text else False
+
+    if not is_reply_to_bot and not is_mention:
+        # Message not addressed to bot
+        return
+
+    try:
+        # Get personality
+        personality = db_service.get_personality(session['personality'])
+        if not personality:
+            await message.reply_text("❌ Ошибка: личность не найдена.")
+            return
+
+        # Get chat history for context
+        history = db_service.get_chat_history(
+            chat_id=chat_id,
+            user_id=user_id,
+            limit=config.DIRECT_CHAT_CONTEXT_MESSAGES
+        )
+
+        # Generate response
+        response = ai_service.generate_chat_response(
+            user_message=message.text,
+            personality=personality,
+            history=history
+        )
+
+        # Send response
+        await message.reply_text(response)
+
+        # Update session activity timestamp
+        session['started_at'] = datetime.now()
+
+        # Log analytics
+        db_service.log_event(
+            user_id=user_id,
+            chat_id=chat_id,
+            event_type="group_chat_message",
+            metadata={"personality": session['personality']}
+        )
+
+    except Exception as e:
+        logger.error(f"Error handling group chat message: {e}")
+        await message.reply_text(
+            "❌ Ошибка при генерации ответа. Попробуй ещё раз."
+        )
 
 
 async def handle_create_personality_callback(
@@ -377,8 +605,6 @@ async def handle_create_personality_callback(
             f"/{config.COMMAND_PERSONALITY}\n\n"
             "Там ты сможешь выбрать 'Создать свою' и описать уникальный стиль!"
         )
-
-        logger.info(f"User {update.effective_user.id} clicked create personality button")
 
     except Exception as e:
         logger.error(f"Error handling create personality callback: {e}")

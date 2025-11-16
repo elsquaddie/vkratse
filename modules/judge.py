@@ -28,8 +28,6 @@ async def judge_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     chat = update.effective_chat
     db = DBService()
 
-    logger.info(f"Judge command from user {user.id} in chat {chat.id}")
-
     # 1. Validate command is not empty
     if not context.args or len(context.args) == 0:
         await update.message.reply_text(
@@ -80,8 +78,6 @@ async def judge_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         reply_markup=keyboard
     )
 
-    logger.info(f"Showed personality menu for judge in chat {chat.id}")
-
 
 async def handle_judge_personality_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
@@ -100,11 +96,9 @@ async def handle_judge_personality_callback(update: Update, context: ContextType
 
     try:
         # Parse callback data: judge_personality:<chat_id>:<personality_id>:<signature>
-        logger.info(f"[JUDGE SIGNATURE CHECK] Parsing callback_data: '{query.data}' from user {user.id}")
-
         parts = query.data.split(":")
         if len(parts) != 4:
-            logger.error(f"[JUDGE SIGNATURE CHECK] Invalid format: expected 4 parts, got {len(parts)}")
+            logger.error(f"Invalid judge callback format: expected 4 parts, got {len(parts)}")
             await query.edit_message_text("❌ Неверный формат данных")
             return
 
@@ -146,7 +140,6 @@ async def handle_judge_personality_callback(update: Update, context: ContextType
 
         # Get recent messages for context
         messages = db.get_messages(chat_id=chat_id, limit=50)
-        logger.debug(f"Using {len(messages)} recent messages for analysis")
 
         # Update message to show processing
         await query.edit_message_text(
@@ -175,8 +168,6 @@ async def handle_judge_personality_callback(update: Update, context: ContextType
         # Clear context
         context.user_data.pop('judge_dispute_text', None)
         context.user_data.pop('judge_chat_id', None)
-
-        logger.info(f"Generated verdict for chat {chat_id} with personality {personality.name}")
 
     except Exception as e:
         logger.error(f"Error in judge personality callback: {e}")

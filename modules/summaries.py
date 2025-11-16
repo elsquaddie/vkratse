@@ -90,8 +90,6 @@ async def summary_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     user = update.effective_user
     chat = update.effective_chat
 
-    logger.info(f"Summary command from user {user.id} in chat {chat.id} ({chat.type})")
-
     # Check if in DM
     if chat.type == ChatType.PRIVATE:
         await _summary_in_dm(update, context)
@@ -126,7 +124,6 @@ async def _summary_in_group(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     if context.args:
         try:
             custom_limit = str(int(context.args[0]))  # Validate it's a number
-            logger.info(f"Custom message limit: {custom_limit}")
         except ValueError:
             await update.message.reply_text(
                 f"❌ Неверный формат. Используй число сообщений:\n\n"
@@ -152,8 +149,6 @@ async def _summary_in_group(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         "🎭 Выбери личность для саммари:",
         reply_markup=keyboard
     )
-
-    logger.info(f"Showed personality menu to user {user.id} in chat {chat.id}")
 
 
 async def _summary_in_dm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -283,8 +278,6 @@ async def summary_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         'personality': personality_name
     })
 
-    logger.info(f"Generated DM summary for user {user.id}, chat {chat_id}")
-
 
 async def summary_personality_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
@@ -358,8 +351,6 @@ async def summary_personality_callback(update: Update, context: ContextTypes.DEF
         f"⏰ Выбери период для саммари:",
         reply_markup=keyboard
     )
-
-    logger.info(f"User {user.id} selected personality {personality.name} for chat {chat_id}")
 
 
 async def summary_timeframe_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -487,8 +478,6 @@ async def _execute_summary(
             'personality': personality.name
         })
 
-        logger.info(f"Generated summary for chat {chat_id} ({len(messages)} messages) with personality {personality.name}")
-
     except Exception as e:
         logger.error(f"Error generating summary: {e}")
         await query.message.edit_text(
@@ -540,5 +529,3 @@ async def back_to_summary_personality_callback(update: Update, context: ContextT
         "🎭 Выбери личность для саммари:",
         reply_markup=keyboard
     )
-
-    logger.info(f"User {user.id} returned to personality selection for summary in chat {chat_id}")

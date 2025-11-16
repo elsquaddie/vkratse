@@ -49,11 +49,7 @@ class DBService:
                 .lt('created_at', time_threshold.isoformat())\
                 .execute()
 
-            deleted_count = len(delete_response.data) if delete_response.data else 0
-            if deleted_count > 0:
-                logger.info(f"Auto-deleted {deleted_count} old messages from chat {chat_id} (older than {config.MESSAGE_RETENTION_DAYS} days)")
-
-            logger.debug(f"Saved message from {username} in chat {chat_id}")
+            # Auto-cleanup completed silently
         except Exception as e:
             logger.error(f"Error saving message: {e}")
 
@@ -77,8 +73,6 @@ class DBService:
             messages = [Message.from_dict(msg) for msg in response.data]
             # Reverse to get chronological order
             messages.reverse()
-
-            logger.debug(f"Retrieved {len(messages)} messages from chat {chat_id}")
             return messages
         except Exception as e:
             logger.error(f"Error getting messages: {e}")
@@ -102,8 +96,6 @@ class DBService:
 
             messages = [Message.from_dict(msg) for msg in response.data]
             messages.reverse()
-
-            logger.debug(f"Retrieved {len(messages)} messages from users {usernames}")
             return messages
         except Exception as e:
             logger.error(f"Error getting messages by users: {e}")
@@ -113,7 +105,6 @@ class DBService:
         """Delete all messages from a chat (when bot is removed)"""
         try:
             self.client.table('messages').delete().eq('chat_id', chat_id).execute()
-            logger.info(f"Deleted all messages from chat {chat_id}")
         except Exception as e:
             logger.error(f"Error deleting messages: {e}")
 
@@ -158,26 +149,16 @@ class DBService:
     def get_all_personalities(self, include_inactive: bool = False) -> List[Personality]:
         """Get all personalities"""
         try:
-            logger.info(f"🔍 [DB] Fetching personalities (include_inactive={include_inactive})")
             query = self.client.table('personalities').select('*')
 
             if not include_inactive:
                 query = query.eq('is_active', True)
 
             response = query.order('id').execute()
-            logger.info(f"🔍 [DB] Got {len(response.data)} rows from personalities table")
-
-            # Log raw data for debugging
-            for idx, p in enumerate(response.data):
-                logger.info(f"🔍 [DB] Personality {idx}: {p}")
-
             personalities = [Personality.from_dict(p) for p in response.data]
-            logger.info(f"✅ [DB] Successfully parsed {len(personalities)} personalities")
             return personalities
         except Exception as e:
-            logger.error(f"❌ [DB] Error getting personalities: {e}")
-            logger.error(f"❌ [DB] Error type: {type(e).__name__}")
-            logger.error(f"❌ [DB] Error traceback:", exc_info=True)
+            logger.error(f"Error getting personalities: {e}", exc_info=True)
             return []
 
     def create_personality(
@@ -202,7 +183,6 @@ class DBService:
 
             if response.data:
                 personality_id = response.data[0]['id']
-                logger.info(f"Created custom personality '{name}' (ID: {personality_id})")
                 return personality_id
             return None
         except Exception as e:
@@ -257,7 +237,6 @@ class DBService:
                 .execute()
 
             personalities = [Personality.from_dict(p) for p in response.data]
-            logger.info(f"Retrieved {len(personalities)} personalities for user {user_id}")
             return personalities
         except Exception as e:
             logger.error(f"Error getting user personalities: {e}")
@@ -295,7 +274,6 @@ class DBService:
                 .eq('name', name)\
                 .execute()
 
-            logger.info(f"User {user_id} deleted custom personality '{name}'")
             return True
 
         except Exception as e:
@@ -363,7 +341,6 @@ class DBService:
                 .eq('name', name)\
                 .execute()
 
-            logger.info(f"User {user_id} updated custom personality '{name}': {list(update_data.keys())}")
             return True
 
         except Exception as e:
@@ -404,7 +381,6 @@ class DBService:
                 'selected_personality': personality_name
             }).execute()
 
-            logger.info(f"Updated personality for user {user_id} to '{personality_name}'")
         except Exception as e:
             logger.error(f"Error updating user personality: {e}")
 
@@ -427,7 +403,6 @@ class DBService:
                 'last_activity': datetime.now(timezone.utc).isoformat()
             }).execute()
 
-            logger.debug(f"Updated metadata for chat {chat_id}")
         except Exception as e:
             logger.error(f"Error saving chat metadata: {e}")
 
@@ -435,7 +410,6 @@ class DBService:
         """Delete chat metadata (when bot is removed)"""
         try:
             self.client.table('chat_metadata').delete().eq('chat_id', chat_id).execute()
-            logger.info(f"Deleted metadata for chat {chat_id}")
         except Exception as e:
             logger.error(f"Error deleting chat metadata: {e}")
 
@@ -472,7 +446,6 @@ class DBService:
                 'metadata': metadata or {}
             }).execute()
 
-            logger.debug(f"Logged event: {event_type} for user {user_id}")
         except Exception as e:
             logger.error(f"Error logging event: {e}")
 
@@ -490,7 +463,6 @@ class DBService:
                 event_type = event['event_type']
                 stats[event_type] = stats.get(event_type, 0) + 1
 
-            logger.debug(f"Retrieved stats for user {user_id}: {stats}")
             return stats
         except Exception as e:
             logger.error(f"Error getting user stats: {e}")
@@ -533,7 +505,6 @@ class DBService:
             # Reverse to get chronological order (oldest first)
             messages.reverse()
 
-            logger.debug(f"Retrieved {len(messages)} messages for chat history (chat: {chat_id}, user: {user_id})")
             return messages
         except Exception as e:
             logger.error(f"Error getting chat history: {e}")
@@ -569,7 +540,6 @@ class DBService:
                 'last_activity': datetime.now(timezone.utc).isoformat()
             }).execute()
 
-            logger.info(f"Created chat session for user {user_id} in chat {chat_id} with personality '{personality}'")
             return True
         except Exception as e:
             logger.error(f"Error creating chat session: {e}")
@@ -599,7 +569,6 @@ class DBService:
                 .execute()
 
             if response.data:
-                logger.debug(f"Found active session for user {user_id} in chat {chat_id}")
                 return response.data
             return None
         except Exception:
@@ -629,8 +598,6 @@ class DBService:
                 .execute()
 
             updated = len(response.data) > 0 if response.data else False
-            if updated:
-                logger.debug(f"Updated session activity for user {user_id} in chat {chat_id}")
             return updated
         except Exception as e:
             logger.error(f"Error updating session activity: {e}")
@@ -659,8 +626,6 @@ class DBService:
                 .execute()
 
             deleted = len(response.data) > 0 if response.data else False
-            if deleted:
-                logger.info(f"Ended chat session for user {user_id} in chat {chat_id}")
             return deleted
         except Exception as e:
             logger.error(f"Error ending chat session: {e}")
@@ -688,8 +653,6 @@ class DBService:
                 .execute()
 
             deleted_count = len(response.data) if response.data else 0
-            if deleted_count > 0:
-                logger.info(f"Cleaned up {deleted_count} inactive chat sessions (timeout: {timeout_minutes} min)")
             return deleted_count
         except Exception as e:
             logger.error(f"Error cleaning up inactive sessions: {e}")

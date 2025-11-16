@@ -76,7 +76,6 @@ class AIService:
             )
 
             summary = response.content[0].text.strip()
-            logger.info(f"Generated summary using personality '{personality.name}'")
             return summary
 
         except Exception as e:
@@ -154,7 +153,6 @@ class AIService:
             )
 
             verdict = response.content[0].text.strip()
-            logger.info(f"Generated verdict using personality '{personality.name}'")
             return verdict
 
         except Exception as e:
@@ -213,7 +211,6 @@ class AIService:
             )
 
             reply = response.content[0].text.strip()
-            logger.info(f"Generated chat response using personality '{personality.name}'")
             return reply
 
         except Exception as e:
@@ -258,7 +255,6 @@ class AIService:
             )
 
             greeting = response.content[0].text.strip()
-            logger.info(f"Generated greeting for personality '{personality.name}'")
             return greeting
 
         except Exception as e:

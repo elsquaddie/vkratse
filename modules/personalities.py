@@ -35,8 +35,6 @@ async def personality_command(update: Update, context: ContextTypes.DEFAULT_TYPE
     user = update.effective_user
     db = DBService()
 
-    logger.info(f"Personality command from user {user.id}")
-
     # Get current personality
     current_personality_name = db.get_user_personality(user.id)
     current_display = get_current_personality_display(user.id)
@@ -101,7 +99,6 @@ async def personality_callback(update: Update, context: ContextTypes.DEFAULT_TYP
                 f"Теперь /{config.COMMAND_SUMMARY} и /{config.COMMAND_JUDGE} "
                 f"будут отвечать в этом стиле."
             )
-            logger.info(f"User {user.id} selected personality '{personality_name}'")
         else:
             await query.message.edit_text("❌ Личность не найдена")
 
@@ -157,7 +154,6 @@ async def personality_callback(update: Update, context: ContextTypes.DEFAULT_TYP
             f"Что хочешь изменить?",
             reply_markup=reply_markup
         )
-        logger.info(f"User {user.id} started editing personality '{personality_name}'")
         return AWAITING_EDIT_CHOICE
 
     # Handle delete
@@ -186,7 +182,6 @@ async def personality_callback(update: Update, context: ContextTypes.DEFAULT_TYP
                 f"✅ Личность \"{personality.display_name}\" удалена.\n\n"
                 f"Используй /{config.COMMAND_PERSONALITY} чтобы выбрать другую."
             )
-            logger.info(f"User {user.id} deleted custom personality '{personality_name}'")
         else:
             await query.answer("❌ Не удалось удалить личность", show_alert=True)
 
@@ -201,12 +196,10 @@ async def personality_callback(update: Update, context: ContextTypes.DEFAULT_TYP
 
 async def receive_personality_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Receive personality name (step 1)"""
-    logger.info("🔥🔥🔥 receive_personality_name CALLED!")
 
     user = update.effective_user
     name = update.message.text.strip().lower()
 
-    logger.info(f"User {user.id} proposed personality name: {name}")
 
     # Validate name
     is_valid, error_msg = is_valid_personality_name(name)
@@ -267,7 +260,6 @@ async def receive_personality_emoji(update: Update, context: ContextTypes.DEFAUL
         await update.message.reply_text("❌ Ошибка: имя личности не найдено. Начни заново с /личность")
         return ConversationHandler.END
 
-    logger.info(f"User {user.id} proposed emoji: {emoji} for personality '{name}'")
 
     # Validate emoji (should be 1-4 characters, allowing for complex emoji)
     if len(emoji) > 10 or len(emoji) == 0:
@@ -308,7 +300,6 @@ async def receive_personality_description(update: Update, context: ContextTypes.
         await update.message.reply_text("❌ Ошибка: имя личности не найдено. Начни заново с /личность")
         return ConversationHandler.END
 
-    logger.info(f"User {user.id} provided description for personality '{name}'")
 
     # Sanitize description
     try:
@@ -347,7 +338,6 @@ async def receive_personality_description(update: Update, context: ContextTypes.
         f"Попробуй команду /{config.COMMAND_SUMMARY} в своём чате!"
     )
 
-    logger.info(f"User {user.id} created personality '{name}' {emoji} (ID: {personality_id})")
 
     # Clear context
     context.user_data.clear()
@@ -473,7 +463,6 @@ async def receive_edited_name(update: Update, context: ContextTypes.DEFAULT_TYPE
             f"✅ Название изменено на: {new_name.capitalize()}\n\n"
             f"Используй /{config.COMMAND_PERSONALITY} для дальнейшего управления."
         )
-        logger.info(f"User {user.id} renamed personality '{personality_name}' to '{new_name}'")
     else:
         await update.message.reply_text("❌ Ошибка при обновлении. Попробуй позже.")
 
@@ -512,7 +501,6 @@ async def receive_edited_emoji(update: Update, context: ContextTypes.DEFAULT_TYP
             f"✅ Эмодзи изменён на: {new_emoji}\n\n"
             f"Используй /{config.COMMAND_PERSONALITY} для дальнейшего управления."
         )
-        logger.info(f"User {user.id} changed emoji for personality '{personality_name}' to '{new_emoji}'")
     else:
         await update.message.reply_text("❌ Ошибка при обновлении. Попробуй позже.")
 
@@ -553,7 +541,6 @@ async def receive_edited_description(update: Update, context: ContextTypes.DEFAU
             f"✅ Описание обновлено!\n\n"
             f"Используй /{config.COMMAND_PERSONALITY} для дальнейшего управления."
         )
-        logger.info(f"User {user.id} updated description for personality '{personality_name}'")
     else:
         await update.message.reply_text("❌ Ошибка при обновлении. Попробуй позже.")
 
@@ -563,7 +550,6 @@ async def receive_edited_description(update: Update, context: ContextTypes.DEFAU
 
 async def cancel_personality_creation(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Cancel personality creation or editing"""
-    logger.info(f"User {update.effective_user.id} cancelled personality operation")
 
     await update.message.reply_text(
         "❌ Операция отменена.\n\n"

@@ -37,25 +37,16 @@ async def show_personality_selection(
     """
     try:
         user_id = update.effective_user.id
-        logger.info(f"🔍 [PERSONALITY_SELECT] Starting personality selection for user {user_id}")
 
         # Get all personalities (base + user's custom)
-        logger.info(f"🔍 [PERSONALITY_SELECT] Fetching all personalities from DB...")
         all_personalities = db_service.get_all_personalities()
-        logger.info(f"🔍 [PERSONALITY_SELECT] Got {len(all_personalities)} personalities from DB")
 
         # Separate base and custom personalities
         base_personalities = [p for p in all_personalities if not p.is_custom]
         custom_personalities = [p for p in all_personalities if p.is_custom and p.created_by_user_id == user_id]
-        logger.info(f"🔍 [PERSONALITY_SELECT] Base: {len(base_personalities)}, Custom: {len(custom_personalities)}")
-
-        # Log each personality for debugging
-        for p in base_personalities:
-            logger.info(f"🔍 [PERSONALITY_SELECT] Base personality: name={p.name}, emoji={repr(p.emoji)}, display_name={p.display_name}")
 
         # Build inline keyboard (2 columns layout)
         keyboard = []
-        logger.info(f"🔍 [PERSONALITY_SELECT] Building keyboard...")
 
         # Add base personalities in rows of 2
         for i in range(0, len(base_personalities), 2):
@@ -63,15 +54,12 @@ async def show_personality_selection(
             for j in range(2):
                 if i + j < len(base_personalities):
                     p = base_personalities[i + j]
-                    logger.info(f"🔍 [PERSONALITY_SELECT] Adding button for {p.name} (ID: {p.id}): emoji={repr(p.emoji)}")
                     callback_data = sign_callback_data(f"sel_pers:{p.id}")
                     row.append(InlineKeyboardButton(
                         f"{p.emoji} {p.display_name}",
                         callback_data=callback_data
                     ))
             keyboard.append(row)
-
-        logger.info(f"🔍 [PERSONALITY_SELECT] Keyboard built with {len(keyboard)} rows")
 
         # Add custom personalities
         if custom_personalities:
@@ -117,7 +105,6 @@ async def show_personality_selection(
 
 Каждая личность имеет свой уникальный стиль и подход к разговору."""
 
-        logger.info(f"🔍 [PERSONALITY_SELECT] Sending message to user...")
         if edit_message and update.callback_query:
             await update.callback_query.edit_message_text(
                 text=text,
@@ -129,12 +116,8 @@ async def show_personality_selection(
                 reply_markup=reply_markup
             )
 
-        logger.info(f"✅ [PERSONALITY_SELECT] Successfully showed personality selection to user {user_id}")
-
     except Exception as e:
-        logger.error(f"❌ [PERSONALITY_SELECT] Error showing personality selection: {e}")
-        logger.error(f"❌ [PERSONALITY_SELECT] Error type: {type(e).__name__}")
-        logger.error(f"❌ [PERSONALITY_SELECT] Error traceback:", exc_info=True)
+        logger.error(f"Error showing personality selection: {e}", exc_info=True)
         await update.effective_message.reply_text(
             "❌ Ошибка при загрузке личностей. Попробуй /start"
         )
@@ -199,8 +182,6 @@ async def handle_personality_selection(
             event_type="personality_selected",
             metadata={"personality": personality.name}
         )
-
-        logger.info(f"User {user_id} selected personality '{personality.name}'")
 
     except Exception as e:
         logger.error(f"Error handling personality selection: {e}")
@@ -284,8 +265,6 @@ async def handle_direct_message(
             metadata={"personality": personality_name}
         )
 
-        logger.info(f"Handled direct message from user {user_id} with personality '{personality_name}'")
-
     except Exception as e:
         logger.error(f"Error handling direct message: {e}")
         await update.message.reply_text(
@@ -359,8 +338,6 @@ async def chat_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
         await update.message.reply_text(text, reply_markup=reply_markup)
 
-        logger.info(f"User {user.id} requested /chat in group {chat.id}")
-
     except Exception as e:
         logger.error(f"Error in chat_command: {e}")
         await update.message.reply_text(
@@ -419,8 +396,6 @@ async def stop_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         f"✅ Сессия завершена.\n\n"
         f"Начать новую: /{config.COMMAND_CHAT}"
     )
-
-    logger.info(f"User {user.id} ended chat session in group {chat.id}")
 
 
 async def handle_start_chat_callback(
@@ -500,8 +475,6 @@ async def handle_start_chat_callback(
             event_type="group_chat_session_started",
             metadata={"personality": personality.name}
         )
-
-        logger.info(f"Started group chat session for user {actual_user_id} in chat {chat_id} with personality '{personality.name}'")
 
     except Exception as e:
         logger.error(f"Error handling start_chat callback: {e}")
@@ -599,8 +572,6 @@ async def handle_group_chat_message(
             metadata={"personality": session['personality']}
         )
 
-        logger.info(f"Handled group chat message from user {user_id} in chat {chat_id} with personality '{session['personality']}'")
-
     except Exception as e:
         logger.error(f"Error handling group chat message: {e}")
         await message.reply_text(
@@ -634,8 +605,6 @@ async def handle_create_personality_callback(
             f"/{config.COMMAND_PERSONALITY}\n\n"
             "Там ты сможешь выбрать 'Создать свою' и описать уникальный стиль!"
         )
-
-        logger.info(f"User {update.effective_user.id} clicked create personality button")
 
     except Exception as e:
         logger.error(f"Error handling create personality callback: {e}")

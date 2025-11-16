@@ -22,14 +22,13 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     # Unified welcome message for all chat types
     welcome_text = f"""👋 Привет, {user.first_name}!
 
-Я бот с множественными личностями.
+Я бот с разными личностями.
 
-Я могу:
-• Общаться с тобой в разных стилях
-• Саммаризировать групповые чаты
-• Рассуживать споры
+Могу стать быдлом и пояснить за базар, могу превратиться в олигарха и обкашлять вопросик, могу стать философом и покопаться в смыслах, а могу зумером - лениться и стонать.
 
-Что будем делать?"""
+Короче, что хочешь - то и будет! 🎭
+
+Что мне сделать?"""
 
     # Different buttons for private vs group chats
     if chat_type == ChatType.PRIVATE:
@@ -67,14 +66,13 @@ async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, edi
     # Unified welcome message for all chat types
     welcome_text = f"""👋 Привет, {user.first_name}!
 
-Я бот с множественными личностями.
+Я бот с разными личностями.
 
-Я могу:
-• Общаться с тобой в разных стилях
-• Саммаризировать групповые чаты
-• Рассуживать споры
+Могу стать быдлом и пояснить за базар, могу превратиться в олигарха и обкашлять вопросик, могу стать философом и покопаться в смыслах, а могу зумером - лениться и стонать.
 
-Что будем делать?"""
+Короче, что хочешь - то и будет! 🎭
+
+Что мне сделать?"""
 
     # Different buttons for private vs group chats
     if chat_type == ChatType.PRIVATE:
@@ -142,37 +140,43 @@ async def handle_start_menu_callback(update: Update, context: ContextTypes.DEFAU
             await direct_chat.show_personality_selection(update, context, edit_message=True, show_back_button=True)
 
         elif action == "group_summary":
-            # Show instructions for /summary command with back button
-            text = f"""📝 Сделать саммари
+            # Show personality selection menu directly (no instructions)
+            from services import DBService
+            from utils import build_personality_menu
 
-Чтобы я создал саммари обсуждения, используй команду:
+            db = DBService()
+            chat_id = update.effective_chat.id
 
-/{config.COMMAND_SUMMARY}
+            # Get current personality for ✓ indicator
+            current_personality = db.get_user_personality(user.id)
 
-Опционально можно указать количество сообщений:
-/{config.COMMAND_SUMMARY} 100 — последние 100 сообщений
-/{config.COMMAND_SUMMARY} 200 — последние 200 сообщений
+            # Build personality menu using universal builder
+            keyboard = build_personality_menu(
+                user_id=user.id,
+                callback_prefix="summary_personality",
+                context="select",
+                current_personality=current_personality,
+                extra_callback_data={"chat_id": chat_id, "limit": "none"},
+                show_create_button=False,  # Don't show create button in summary context
+                show_back_button=True  # Show back button to return to main menu
+            )
 
-Я предложу выбрать личность для саммари и подведу итоги обсуждения! 🎭"""
-
-            keyboard = [[InlineKeyboardButton("◀️ Назад", callback_data=sign_callback_data("back_to_main"))]]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            await query.edit_message_text(text, reply_markup=reply_markup)
+            await query.edit_message_text(
+                "🎭 Выбери личность для саммари:",
+                reply_markup=keyboard
+            )
 
         elif action == "group_judge":
-            # Show instructions for /rassudi command with back button
+            # Show concise instructions for /rassudi command with "Got it" button
             text = f"""⚖️ Рассудить спор
 
-Чтобы я рассудил спор, используй команду:
-
-/{config.COMMAND_JUDGE} @user1 @user2 описание спора
+Используй:
+/{config.COMMAND_JUDGE} @user1 @user2 описание
 
 Пример:
-/{config.COMMAND_JUDGE} @ivan @petya Кто прав насчет выбора фреймворка?
+/{config.COMMAND_JUDGE} @ivan @petya Кто прав?"""
 
-Я проанализирую последние сообщения участников и вынесу вердикт в выбранном стиле личности! 🎭"""
-
-            keyboard = [[InlineKeyboardButton("◀️ Назад", callback_data=sign_callback_data("back_to_main"))]]
+            keyboard = [[InlineKeyboardButton("Понятно! ✓", callback_data=sign_callback_data("back_to_main"))]]
             reply_markup = InlineKeyboardMarkup(keyboard)
             await query.edit_message_text(text, reply_markup=reply_markup)
 

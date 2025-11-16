@@ -190,21 +190,9 @@ if bot_initialized:
                     chat_type=chat.type
                 )
 
-                # Send welcome message
-                welcome_text = f"""👋 Привет! Я добавлен в чат.
-
-Я бот с множественными личностями.
-
-Могу:
-• Саммаризировать обсуждения (/{config.COMMAND_SUMMARY})
-• Рассуживать споры (/{config.COMMAND_JUDGE})
-• Общаться в разных стилях (/{config.COMMAND_CHAT})
-
-💡 Дайте мне админ-права для полного функционала!
-
-Все команды: /{config.COMMAND_HELP}"""
-
-                await message.reply_text(welcome_text)
+                # Note: Welcome message is handled by /start command
+                # which is automatically triggered when bot is added via deep-link
+                logger.info(f"Chat metadata saved. /start will handle welcome message.")
                 break
 
 

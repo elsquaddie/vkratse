@@ -181,14 +181,18 @@ def _build_callback_data(
 
     elif callback_prefix == "summary_personality":
         # Format: "summary_personality:<chat_id>:<personality_id>:<limit>:<signature>"
+        # NOTE: Using create_group_signature (no user_id) because in groups,
+        # ANY member can click the button, not just who initiated the command
+        from utils.security import create_group_signature
+
         chat_id = extra_data.get("chat_id") if extra_data else 0
         limit = extra_data.get("limit", "none") if extra_data else "none"
 
         callback_base = f"{chat_id}:{personality.id}:{limit}"
-        signature = create_string_signature(callback_base, user_id)
+        signature = create_group_signature(callback_base)
 
         from config import logger
-        logger.info(f"[SIGNATURE GEN] Creating callback for summary_personality: callback_base='{callback_base}', user_id={user_id}, signature={signature}, full='{callback_prefix}:{callback_base}:{signature}'")
+        logger.info(f"[SIGNATURE GEN] Creating callback for summary_personality: callback_base='{callback_base}', signature={signature}, full='{callback_prefix}:{callback_base}:{signature}'")
 
         return f"{callback_prefix}:{callback_base}:{signature}"
 
@@ -199,13 +203,17 @@ def _build_callback_data(
 
     elif callback_prefix == "judge_personality":
         # Format: "judge_personality:<chat_id>:<personality_id>:<signature>"
+        # NOTE: Using create_group_signature (no user_id) because in groups,
+        # ANY member can click the button, not just who initiated the command
+        from utils.security import create_group_signature
+
         chat_id = extra_data.get("chat_id") if extra_data else 0
 
         callback_base = f"{chat_id}:{personality.id}"
-        signature = create_string_signature(callback_base, user_id)
+        signature = create_group_signature(callback_base)
 
         from config import logger
-        logger.info(f"[JUDGE SIGNATURE GEN] Creating callback for judge_personality: callback_base='{callback_base}', user_id={user_id}, signature={signature}, full='{callback_prefix}:{callback_base}:{signature}'")
+        logger.info(f"[JUDGE SIGNATURE GEN] Creating callback for judge_personality: callback_base='{callback_base}', signature={signature}, full='{callback_prefix}:{callback_base}:{signature}'")
 
         return f"{callback_prefix}:{callback_base}:{signature}"
 

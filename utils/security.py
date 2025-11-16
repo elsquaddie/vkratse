@@ -74,6 +74,33 @@ def create_string_signature(data: str, user_id: int) -> str:
     return signature
 
 
+def create_group_signature(data: str) -> str:
+    """
+    Create HMAC signature for group commands WITHOUT user_id.
+
+    Use this for group chat commands where ANY member can click the button,
+    not just the user who initiated the command.
+
+    Args:
+        data: Arbitrary string to sign (e.g., "-1003243964395:5:none")
+
+    Returns:
+        HMAC signature (16 characters)
+
+    Example:
+        >>> create_group_signature("-1003243964395:5:none")
+        'a1b2c3d4e5f6g7h8'
+    """
+    signature = hmac.new(
+        config.SECRET_KEY.encode(),
+        data.encode(),
+        hashlib.sha256
+    ).hexdigest()[:16]
+
+    logger.info(f"[GROUP SIGNATURE CREATE] data='{data}', signature='{signature}'")
+    return signature
+
+
 def verify_string_signature(data: str, user_id: int, signature: str) -> bool:
     """
     Verify HMAC signature for arbitrary string data + user_id.
@@ -95,6 +122,32 @@ def verify_string_signature(data: str, user_id: int, signature: str) -> bool:
 
     if not is_valid:
         logger.warning(f"Invalid signature for data='{data}', user_id={user_id}, expected='{expected}', received='{signature}'")
+
+    return is_valid
+
+
+def verify_group_signature(data: str, signature: str) -> bool:
+    """
+    Verify HMAC signature for group commands WITHOUT user_id.
+
+    Use this for group chat commands where ANY member can click the button.
+
+    Args:
+        data: Arbitrary string that was signed (e.g., "-1003243964395:5:none")
+        signature: Signature to verify
+
+    Returns:
+        True if valid, False otherwise
+
+    Example:
+        >>> verify_group_signature("-1003243964395:5:none", "a1b2c3d4e5f6g7h8")
+        True
+    """
+    expected = create_group_signature(data)
+    is_valid = hmac.compare_digest(expected, signature)
+
+    if not is_valid:
+        logger.warning(f"[GROUP SIGNATURE] Invalid signature for data='{data}', expected='{expected}', received='{signature}'")
 
     return is_valid
 

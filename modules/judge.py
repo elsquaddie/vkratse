@@ -114,12 +114,15 @@ async def handle_judge_personality_callback(update: Update, context: ContextType
 
         logger.info(f"[JUDGE SIGNATURE CHECK] Parsed: chat_id={chat_id}, personality_id={personality_id}, signature={signature}")
 
-        # Verify HMAC signature
-        callback_base = f"{chat_id}:{personality_id}"
-        logger.info(f"[JUDGE SIGNATURE CHECK] Verifying: callback_base='{callback_base}', user_id={user.id}, received_signature={signature}")
+        # Verify HMAC signature (using group signature - no user_id check)
+        # NOTE: We use verify_group_signature because in groups, ANY member can click the button
+        from utils.security import verify_group_signature
 
-        if not verify_string_signature(callback_base, user.id, signature):
-            logger.error(f"[JUDGE SIGNATURE CHECK] FAILED for judge_personality: callback_base='{callback_base}', user_id={user.id}, signature={signature}")
+        callback_base = f"{chat_id}:{personality_id}"
+        logger.info(f"[JUDGE SIGNATURE CHECK] Verifying GROUP signature: callback_base='{callback_base}', received_signature={signature}")
+
+        if not verify_group_signature(callback_base, signature):
+            logger.error(f"[JUDGE SIGNATURE CHECK] FAILED for judge_personality: callback_base='{callback_base}', signature={signature}")
             await query.edit_message_text("❌ Неверная подпись данных. Попробуй /start")
             return
 

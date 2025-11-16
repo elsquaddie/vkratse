@@ -120,7 +120,9 @@ try:
         handle_direct_message,
         handle_create_personality_callback,
         chat_command,
-        stop_command
+        stop_command,
+        handle_start_chat_callback,
+        handle_group_chat_message
     )
     modules_imported = True
     verbose_log("✅ CHECKPOINT 5: modules import successful")
@@ -324,10 +326,22 @@ def create_bot_application():
         pattern="^create_personality"
     ))
 
+    # Handle group chat session start callback
+    app.add_handler(CallbackQueryHandler(
+        handle_start_chat_callback,
+        pattern="^start_chat:"
+    ))
+
     # Handle direct messages in private chats (must be after ConversationHandler)
     app.add_handler(MessageHandler(
         filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE,
         handle_direct_message
+    ))
+
+    # Handle group chat messages during active sessions (must be before log_message_to_db)
+    app.add_handler(MessageHandler(
+        filters.TEXT & ~filters.COMMAND & filters.ChatType.GROUPS,
+        handle_group_chat_message
     ))
 
     # Log all messages to database (for groups)

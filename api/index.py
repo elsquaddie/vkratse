@@ -90,6 +90,7 @@ try:
         stats_command,
         premium_command,
         mystatus_command,
+        grantpro_command,
         handle_start_menu_callback
     )
     from modules.summaries import (
@@ -273,6 +274,7 @@ def create_bot_application():
     app.add_handler(CommandHandler("stats", stats_command))
     app.add_handler(CommandHandler("premium", premium_command))
     app.add_handler(CommandHandler("mystatus", mystatus_command))
+    app.add_handler(CommandHandler("grantpro", grantpro_command))  # ADMIN ONLY
 
     # Summary command
     app.add_handler(CommandHandler(config.COMMAND_SUMMARY, summary_command))

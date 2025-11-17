@@ -66,6 +66,47 @@ DIRECT_CHAT_CONTEXT_MESSAGES = int(os.getenv('DIRECT_CHAT_CONTEXT_MESSAGES', 30)
 DIRECT_CHAT_SESSION_TIMEOUT = int(os.getenv('DIRECT_CHAT_SESSION_TIMEOUT', 900))  # 15 minutes in seconds
 
 # ================================================
+# MONETIZATION SETTINGS (v2.1)
+# ================================================
+
+# Project Telegram group ID (for group bonus)
+PROJECT_TELEGRAM_GROUP_ID = int(os.getenv('PROJECT_TELEGRAM_GROUP_ID', '0'))
+
+# Tier limits configuration
+TIER_LIMITS = {
+    'free': {
+        'messages_dm': 30,              # Direct messages per day
+        'summaries_dm': 3,              # DM summaries per day
+        'summaries_group': 3,           # Group summaries per day
+        'judge': 2,                     # Judge requests per day
+        'personality_summary': 5,       # Non-neutral personality uses for summary
+        'personality_chat': 5,          # Non-neutral personality uses for chat
+        'personality_judge': 5,         # Non-neutral personality uses for judge
+        'custom_personalities': 0,      # Custom personalities (0 for free, 1 with group)
+        'context_messages': 30,         # Context window size
+        'cooldown_seconds': 60          # Cooldown between actions
+    },
+    'pro': {
+        'messages_dm': 500,             # Direct messages per day
+        'summaries_dm': 10,             # DM summaries per day
+        'summaries_group': 20,          # Group summaries per day
+        'judge': 20,                    # Judge requests per day
+        # Pro users have unlimited personality usage (no personality_* limits)
+        'custom_personalities': 3,      # Custom personalities (4 with group)
+        'context_messages': 50,         # Context window size
+        'cooldown_seconds': 30          # Cooldown between actions
+    }
+}
+
+# Payment settings
+TRIBUTE_URL = os.getenv('TRIBUTE_URL', 'https://tribute.to/your_bot_page')
+ADMIN_USER_ID = int(os.getenv('ADMIN_USER_ID', '0'))  # Admin Telegram ID for manual operations
+
+# YooKassa settings (optional, for automated payments)
+YOOKASSA_SHOP_ID = os.getenv('YOOKASSA_SHOP_ID', '')
+YOOKASSA_SECRET_KEY = os.getenv('YOOKASSA_SECRET_KEY', '')
+
+# ================================================
 # COMMAND NAMES (Latin characters - Telegram API requirement)
 # ================================================
 COMMAND_SUMMARY = 'summary'

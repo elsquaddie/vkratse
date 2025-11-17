@@ -170,10 +170,17 @@ async def handle_personality_selection(
             # Generate greeting for custom personalities without pre-set greeting
             greeting = ai_service.generate_greeting(personality)
 
-        # Send greeting
+        # Send greeting with "Back to menu" button
         greeting_text = f"✨ Выбрана личность: {personality.display_name} {personality.emoji}\n\n{greeting}\n\n💬 Теперь можешь писать мне - я буду отвечать в этом стиле!"
 
-        await query.edit_message_text(greeting_text)
+        # Add inline keyboard with "Back to menu" button
+        keyboard = [[InlineKeyboardButton(
+            "◀️ Назад в меню",
+            callback_data=sign_callback_data("back_to_main")
+        )]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
+        await query.edit_message_text(greeting_text, reply_markup=reply_markup)
 
         # Log analytics
         db_service.log_event(
@@ -457,16 +464,24 @@ async def handle_start_chat_callback(
         if not greeting:
             greeting = ai_service.generate_greeting(personality)
 
-        # Send session started message
+        # Send session started message with "End session" button
         response_text = (
             f"✅ Начата сессия общения с {personality.display_name} {personality.emoji}\n\n"
             f"{greeting}\n\n"
             f"💬 Пиши мне через reply на мои сообщения или @упоминание.\n"
-            f"⏱️ Сессия автоматически завершится через {config.DIRECT_CHAT_SESSION_TIMEOUT // 60} минут.\n"
-            f"🛑 Завершить вручную: /{config.COMMAND_STOP}"
+            f"⏱️ Сессия автоматически завершится через {config.DIRECT_CHAT_SESSION_TIMEOUT // 60} минут."
         )
 
-        await query.edit_message_text(response_text)
+        # Add inline keyboard with "End session" button
+        # Note: Only the user who started the session can click this button (checked by user_id)
+        from utils.security import sign_callback_data
+        keyboard = [[InlineKeyboardButton(
+            "🛑 Завершить сессию",
+            callback_data=sign_callback_data(f"end_group_chat:{actual_user_id}")
+        )]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
+        await query.edit_message_text(response_text, reply_markup=reply_markup)
 
         # Log analytics
         db_service.log_event(
@@ -577,6 +592,75 @@ async def handle_group_chat_message(
         await message.reply_text(
             "❌ Ошибка при генерации ответа. Попробуй ещё раз."
         )
+
+
+async def handle_end_group_chat_callback(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """
+    Handle "End session" button click in group chats.
+    Only the user who started the session can end it.
+
+    Args:
+        update: Telegram update object
+        context: Bot context
+    """
+    query = update.callback_query
+    await query.answer()
+
+    try:
+        # Verify HMAC signature
+        if not verify_callback_data(query.data):
+            await query.answer("❌ Неверная подпись данных.", show_alert=True)
+            return
+
+        # Extract user_id from callback_data (format: "end_group_chat:user_id:HMAC")
+        parts = query.data.split(":")
+        if len(parts) < 2:
+            await query.answer("❌ Неверный формат данных.", show_alert=True)
+            return
+
+        session_user_id = int(parts[1])
+        actual_user_id = query.from_user.id
+        chat_id = query.message.chat_id
+
+        # Security check: only the user who started the session can end it
+        if actual_user_id != session_user_id:
+            await query.answer("❌ Эта сессия принадлежит другому пользователю.", show_alert=True)
+            return
+
+        # Check if session exists
+        if 'group_chat_sessions' not in context.bot_data:
+            await query.edit_message_text("❌ Сессия уже завершена.")
+            return
+
+        session_key = (chat_id, actual_user_id)
+        session = context.bot_data['group_chat_sessions'].get(session_key)
+
+        if not session:
+            await query.edit_message_text("❌ Сессия уже завершена.")
+            return
+
+        # End session
+        del context.bot_data['group_chat_sessions'][session_key]
+
+        # Log analytics
+        db_service.log_event(
+            user_id=actual_user_id,
+            chat_id=chat_id,
+            event_type="group_chat_session_ended",
+            metadata={"personality": session['personality']}
+        )
+
+        await query.edit_message_text(
+            f"✅ Сессия завершена.\n\n"
+            f"Начать новую: /{config.COMMAND_CHAT}"
+        )
+
+    except Exception as e:
+        logger.error(f"Error handling end group chat callback: {e}")
+        await query.answer("❌ Ошибка при завершении сессии.", show_alert=True)
 
 
 async def handle_create_personality_callback(

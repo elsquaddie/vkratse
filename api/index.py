@@ -95,11 +95,13 @@ try:
         summary_callback,
         summary_personality_callback,
         summary_timeframe_callback,
+        dm_summary_personality_callback,
         back_to_summary_personality_callback
     )
     from modules.judge import (
         judge_command,
         handle_judge_personality_callback,
+        handle_judge_cancel_callback,
         receive_dispute_description,
         cancel_judge,
         AWAITING_DISPUTE_DESCRIPTION
@@ -125,6 +127,7 @@ try:
         handle_personality_selection,
         handle_direct_message,
         handle_create_personality_callback,
+        handle_end_group_chat_callback,
         chat_command,
         stop_command,
         handle_start_chat_callback,
@@ -198,9 +201,28 @@ if bot_initialized:
                     chat_type=chat.type
                 )
 
-                # Note: Welcome message is handled by /start command
-                # which is automatically triggered when bot is added via deep-link
-                logger.info(f"Chat metadata saved. /start will handle welcome message.")
+                # Send welcome message
+                welcome_text = f"""👋 Привет! Я бот с разными личностями.
+
+📝 **Важно:** Я могу саммаризировать и рассуждать только те сообщения, которые появятся **после** моего добавления в чат. История до моего прихода мне не видна!
+
+🎭 **Что я умею:**
+• /{config.COMMAND_SUMMARY} - создать саммари обсуждения в выбранном стиле
+• /{config.COMMAND_CHAT} - пообщаться напрямую в группе
+• /{config.COMMAND_JUDGE} - рассудить спор
+
+💬 Начните общаться в чате, чтобы я мог вам помочь!
+📚 Полная справка: /{config.COMMAND_HELP}"""
+
+                try:
+                    await context.bot.send_message(
+                        chat_id=chat.id,
+                        text=welcome_text
+                    )
+                    logger.info(f"Welcome message sent to chat {chat.id}")
+                except Exception as e:
+                    logger.error(f"Error sending welcome message: {e}")
+
                 break
 
 
@@ -263,6 +285,10 @@ def create_bot_application():
         pattern="^summary_timeframe:"
     ))
     app.add_handler(CallbackQueryHandler(
+        dm_summary_personality_callback,
+        pattern="^dm_summary_personality:"
+    ))
+    app.add_handler(CallbackQueryHandler(
         back_to_summary_personality_callback,
         pattern="^back_to_summary_personality:"
     ))
@@ -271,18 +297,18 @@ def create_bot_application():
     app.add_handler(CommandHandler(config.COMMAND_CHAT, chat_command))
     app.add_handler(CommandHandler(config.COMMAND_STOP, stop_command))
 
-    # Judge command with ConversationHandler
+    # Judge command with ConversationHandler (groups only)
     judge_conv = ConversationHandler(
         entry_points=[
-            CommandHandler(config.COMMAND_JUDGE, judge_command)
+            CommandHandler(config.COMMAND_JUDGE, judge_command, filters=filters.ChatType.GROUPS)
         ],
         states={
             AWAITING_DISPUTE_DESCRIPTION: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, receive_dispute_description)
+                MessageHandler(filters.TEXT & ~filters.COMMAND & filters.ChatType.GROUPS, receive_dispute_description)
             ]
         },
         fallbacks=[
-            CommandHandler("cancel", cancel_judge)
+            CommandHandler("cancel", cancel_judge, filters=filters.ChatType.GROUPS)
         ],
         name="judge_conversation",
         persistent=True  # Enable persistence for serverless environment
@@ -293,6 +319,12 @@ def create_bot_application():
     app.add_handler(CallbackQueryHandler(
         handle_judge_personality_callback,
         pattern="^judge_personality:"
+    ))
+
+    # Judge cancel callback (back button during personality selection)
+    app.add_handler(CallbackQueryHandler(
+        handle_judge_cancel_callback,
+        pattern="^judge_cancel:"
     ))
 
     # Personality command with conversation for creating/editing custom ones
@@ -353,6 +385,12 @@ def create_bot_application():
     app.add_handler(CallbackQueryHandler(
         handle_start_chat_callback,
         pattern="^start_chat:"
+    ))
+
+    # Handle group chat session end callback
+    app.add_handler(CallbackQueryHandler(
+        handle_end_group_chat_callback,
+        pattern="^end_group_chat:"
     ))
 
     # Handle direct messages in private chats (must be after ConversationHandler)

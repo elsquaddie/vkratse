@@ -206,14 +206,14 @@ async def _summary_in_dm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 async def summary_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
-    Handle callback from chat selection buttons
+    Handle callback from chat selection buttons in DM
+    Shows personality selection menu after chat selection
 
     Callback data format: summary:{chat_id}:{signature}
     """
     query = update.callback_query
     user = query.from_user
     db = DBService()
-    ai = AIService()
 
     await query.answer()
 
@@ -222,61 +222,44 @@ async def summary_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         _, chat_id_str, signature = query.data.split(':')
         chat_id = int(chat_id_str)
     except (ValueError, IndexError):
-        await query.message.reply_text("❌ Неверные данные кнопки")
+        await query.edit_message_text("❌ Неверные данные кнопки")
         return
 
     # 1. Verify signature
     if not verify_signature(chat_id, user.id, signature):
-        await query.message.reply_text("❌ Неверная подпись. Попробуй заново.")
+        await query.edit_message_text("❌ Неверная подпись. Попробуй заново.")
         return
 
     # 2. Validate access
     ok, error = await validate_chat_access(context.bot, chat_id, user.id)
     if not ok:
-        await query.message.reply_text(error)
+        await query.edit_message_text(error)
         return
 
     # 3. Rate limit check
     ok, remaining = check_rate_limit(user.id)
     if not ok:
-        await query.message.reply_text(
+        await query.edit_message_text(
             f"⏰ Слишком много запросов. Подожди {remaining} секунд."
         )
         return
 
-    # 4. Get messages (default period)
-    since, period_desc = get_default_period()
-    messages = db.get_messages(
-        chat_id=chat_id,
-        since=since,
-        limit=config.MAX_MESSAGES_PER_SUMMARY
+    # 4. Show personality selection menu (using universal builder)
+    keyboard = build_personality_menu(
+        user_id=user.id,
+        callback_prefix="dm_summary_personality",
+        context="select",
+        current_personality=None,  # No checkmark - user must choose
+        extra_callback_data={"chat_id": chat_id},
+        show_create_button=False,  # Don't show create button in summary context
+        show_back_button=True,  # Show back button to return to chat selection
+        back_callback="dm_summary"
     )
 
-    if not messages:
-        await query.message.reply_text(f"📭 Нет сообщений {period_desc}.")
-        return
-
-    # 5. Get personality
-    personality_name = db.get_user_personality(user.id)
-    personality = db.get_personality(personality_name)
-
-    if not personality:
-        personality = db.get_personality(config.DEFAULT_PERSONALITY)
-
-    # 6. Generate summary
-    await query.message.reply_text("⏳ Генерирую саммари...")
-
-    summary = ai.generate_summary(messages, personality, period_desc)
-
-    # 7. Send summary in DM
-    await query.message.reply_text(f"📝 Саммари чата:\n\n{summary}")
-
-    # 8. Log event
-    db.log_event(user.id, chat_id, 'summary_dm', {
-        'period': period_desc,
-        'message_count': len(messages),
-        'personality': personality_name
-    })
+    await query.edit_message_text(
+        "🎭 Выбери личность для саммари:",
+        reply_markup=keyboard
+    )
 
 
 async def summary_personality_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -484,6 +467,53 @@ async def _execute_summary(
             f"❌ Ошибка при генерации саммари. Попробуй позже.\n\n"
             f"Детали: {str(e)[:100]}"
         )
+
+
+async def dm_summary_personality_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Handle personality selection callback for DM summaries.
+    Shows timeframe menu after personality selection.
+
+    Callback data format: dm_summary_personality:<chat_id>:<personality_id>:<signature>
+    """
+    query = update.callback_query
+    user = query.from_user
+    db = DBService()
+
+    await query.answer()
+
+    # Parse callback data
+    try:
+        _, chat_id_str, personality_id_str, signature = query.data.split(':')
+        chat_id = int(chat_id_str)
+        personality_id = int(personality_id_str)
+    except (ValueError, IndexError) as e:
+        await query.edit_message_text("❌ Неверные данные кнопки")
+        logger.error(f"Error parsing dm_summary_personality callback: {e}")
+        return
+
+    # Verify signature
+    callback_base = f"{chat_id}:{personality_id}"
+    if not verify_string_signature(callback_base, user.id, signature):
+        await query.edit_message_text("❌ Неверная подпись. Попробуй заново.")
+        logger.error(f"Invalid signature for dm_summary_personality: callback_base='{callback_base}', user_id={user.id}")
+        return
+
+    # Get personality
+    personality = db.get_personality_by_id(personality_id)
+    if not personality:
+        await query.edit_message_text("❌ Личность не найдена.")
+        logger.error(f"Personality {personality_id} not found")
+        return
+
+    # Show timeframe menu
+    keyboard = _build_timeframe_menu(user.id, chat_id, personality_id)
+
+    await query.edit_message_text(
+        f"🎭 Личность: {personality.emoji} {personality.display_name}\n\n"
+        f"⏰ Выбери период для саммари:",
+        reply_markup=keyboard
+    )
 
 
 async def back_to_summary_personality_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

@@ -222,7 +222,8 @@ async def handle_start_menu_callback(update: Update, context: ContextTypes.DEFAU
                 current_personality=None,  # No checkmark - user must choose
                 extra_callback_data={"chat_id": chat_id, "limit": "none"},
                 show_create_button=False,  # Don't show create button in summary context
-                show_back_button=True  # Show back button to return to main menu
+                show_back_button=True,  # Show back button to return to main menu
+                back_callback="back_to_main"
             )
 
             await query.edit_message_text(

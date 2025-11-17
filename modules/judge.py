@@ -225,6 +225,26 @@ async def handle_judge_personality_callback(update: Update, context: ContextType
             await query.edit_message_text("❌ Личность не найдена")
             return
 
+        # ================================================
+        # MONETIZATION: Check personality usage limit for judge
+        # ================================================
+        subscription = SubscriptionService(db)
+        personality_check = await subscription.check_personality_limit(
+            user_id=user.id,
+            personality=personality.name,
+            action='judge'
+        )
+
+        if not personality_check['can_proceed']:
+            # User has exceeded personality usage limit
+            await query.edit_message_text(
+                f"⚠️ Лимит использования личности '{personality.display_name}' исчерпан "
+                f"({personality_check['current']}/{personality_check['limit']}).\n\n"
+                f"💎 Pro-подписка дает безлимитное использование всех личностей!\n"
+                f"Узнать больше: /premium"
+            )
+            return
+
         # Get recent messages for context
         messages = db.get_messages(chat_id=chat_id, limit=50)
 
@@ -246,8 +266,15 @@ async def handle_judge_personality_callback(update: Update, context: ContextType
         # ================================================
         # MONETIZATION: Increment usage counter after successful verdict
         # ================================================
-        subscription = SubscriptionService(db)
+        # subscription already initialized above
         await subscription.increment_usage(user.id, 'judge')
+
+        # Increment personality usage counter
+        await subscription.increment_personality_usage(
+            user_id=user.id,
+            personality=personality.name,
+            action='judge'
+        )
 
         # Set cooldown
         set_cooldown(chat_id, 'judge')

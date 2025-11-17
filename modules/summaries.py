@@ -161,7 +161,7 @@ async def _summary_in_group(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         context="select",
         current_personality=None,  # No checkmark in summary context
         extra_callback_data={"chat_id": chat.id, "limit": custom_limit or "none"},
-        show_create_button=False  # Don't show create button in summary context
+        show_create_button=True  # Allow creating custom personality during summary
     )
 
     await update.message.reply_text(
@@ -288,7 +288,7 @@ async def summary_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         context="select",
         current_personality=None,  # No checkmark - user must choose
         extra_callback_data={"chat_id": chat_id},
-        show_create_button=False,  # Don't show create button in summary context
+        show_create_button=True,  # Allow creating custom personality during summary
         show_back_button=True,  # Show back button to return to chat selection
         back_callback="dm_summary"
     )
@@ -646,7 +646,7 @@ async def back_to_summary_personality_callback(update: Update, context: ContextT
         context="select",
         current_personality=None,  # No checkmark in summary context
         extra_callback_data={"chat_id": chat_id, "limit": "none"},
-        show_create_button=False
+        show_create_button=True  # Allow creating custom personality during summary
     )
 
     await query.message.edit_text(

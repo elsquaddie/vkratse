@@ -130,7 +130,6 @@ try:
     from modules.direct_chat import (
         handle_personality_selection,
         handle_direct_message,
-        handle_create_personality_callback,
         handle_end_group_chat_callback,
         chat_command,
         stop_command,
@@ -316,6 +315,12 @@ def create_bot_application():
         .persistence(persistence)\
         .build()
 
+    # Initialize subscription service (needed for personality limits, etc.)
+    from services.subscription import init_subscription_service
+    db = DBService()
+    init_subscription_service(db)
+    verbose_log("✅ Subscription service initialized")
+
     # Basic commands
     app.add_handler(CommandHandler("start", start_command))
     app.add_handler(CommandHandler(config.COMMAND_HELP, help_command))
@@ -429,11 +434,7 @@ def create_bot_application():
         pattern="^sel_pers:"
     ))
 
-    # Handle create personality callback
-    app.add_handler(CallbackQueryHandler(
-        handle_create_personality_callback,
-        pattern="^create_personality"
-    ))
+    # NOTE: "pers:create_start" callback is handled by personality_conv ConversationHandler above
 
     # Handle group chat session start callback
     app.add_handler(CallbackQueryHandler(

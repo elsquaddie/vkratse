@@ -79,10 +79,10 @@ async def show_personality_selection(
                         ))
                 keyboard.append(row)
 
-        # Add "Create custom personality" button (redirect to /lichnost)
+        # Add "Create custom personality" button (starts personality creation flow)
         keyboard.append([InlineKeyboardButton(
             "➕ Создать свою личность",
-            callback_data=sign_callback_data("create_personality")
+            callback_data="pers:create_start"  # Same as in personality_menu.py
         )])
 
         # Add back button if needed

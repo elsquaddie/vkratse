@@ -256,6 +256,25 @@ async def handle_direct_message(
             )
             return
 
+        # ================================================
+        # MONETIZATION: Check personality usage limit for chat
+        # ================================================
+        personality_check = await subscription_service.check_personality_limit(
+            user_id=user_id,
+            personality=personality.name,
+            action='chat'
+        )
+
+        if not personality_check['can_proceed']:
+            # User has exceeded personality usage limit
+            await update.message.reply_text(
+                f"⚠️ Лимит использования личности '{personality.display_name}' исчерпан "
+                f"({personality_check['current']}/{personality_check['limit']}).\n\n"
+                f"💎 Pro-подписка дает безлимитное использование всех личностей!\n"
+                f"Узнать больше: /premium"
+            )
+            return
+
         # Save user's message
         db_service.save_message(chat_id, user_id, username, message_text)
 
@@ -288,6 +307,13 @@ async def handle_direct_message(
         # MONETIZATION: Increment usage counter after successful response
         # ================================================
         await subscription_service.increment_usage(user_id, 'messages_dm')
+
+        # Increment personality usage counter
+        await subscription_service.increment_personality_usage(
+            user_id=user_id,
+            personality=personality.name,
+            action='chat'
+        )
 
         # Log analytics
         db_service.log_event(

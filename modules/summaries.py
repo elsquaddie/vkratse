@@ -443,6 +443,27 @@ async def _execute_summary(
     """
     db = DBService()
     ai = AIService()
+    subscription = SubscriptionService(db)
+
+    # ================================================
+    # MONETIZATION: Check personality usage limit
+    # ================================================
+    personality_check = await subscription.check_personality_limit(
+        user_id=user.id,
+        personality=personality.name,
+        action='summary'
+    )
+
+    if not personality_check['can_proceed']:
+        # User has exceeded personality usage limit
+        message_text = (
+            f"⚠️ Лимит использования личности '{personality.display_name}' исчерпан "
+            f"({personality_check['current']}/{personality_check['limit']}).\n\n"
+            f"💎 Pro-подписка дает безлимитное использование всех личностей!\n"
+            f"Узнать больше: /premium"
+        )
+        await query.message.edit_text(message_text)
+        return
 
     # Parse timeframe
     if timeframe.isdigit():
@@ -491,7 +512,7 @@ async def _execute_summary(
         # ================================================
         # MONETIZATION: Increment usage counter after successful summary
         # ================================================
-        subscription = SubscriptionService(db)
+        # subscription already initialized at the top of function
 
         # Determine if summary is in DM or group
         # Get chat info to determine type
@@ -506,6 +527,13 @@ async def _execute_summary(
         # Increment appropriate counter
         action = 'summaries_dm' if is_dm else 'summaries_group'
         await subscription.increment_usage(user.id, action)
+
+        # Increment personality usage counter
+        await subscription.increment_personality_usage(
+            user_id=user.id,
+            personality=personality.name,
+            action='summary'
+        )
 
         # Set cooldown
         set_cooldown(chat_id, 'summary')

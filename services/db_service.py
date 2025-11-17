@@ -923,6 +923,58 @@ class DBService:
             logger.error(f"Error incrementing personality usage for {user_id}, {personality}, {action}: {e}")
             return False
 
+    async def get_top_personality_usage(
+        self,
+        user_id: int,
+        date: 'date',
+        limit: int = 3
+    ) -> List[dict]:
+        """
+        Get top N most used personalities for a user on a specific date
+
+        Args:
+            user_id: Telegram user ID
+            date: Date to check
+            limit: Number of top personalities to return (default 3)
+
+        Returns:
+            List of personality usage records sorted by total usage descending
+        """
+        try:
+            from datetime import date as date_type
+            date_str = date.isoformat()
+
+            response = self.client.table('personality_usage')\
+                .select('*')\
+                .eq('user_id', user_id)\
+                .eq('date', date_str)\
+                .execute()
+
+            if not response.data:
+                return []
+
+            # Calculate total usage for each personality and sort
+            for record in response.data:
+                record['total_usage'] = (
+                    record.get('summary_count', 0) +
+                    record.get('chat_count', 0) +
+                    record.get('judge_count', 0)
+                )
+
+            # Sort by total usage descending
+            sorted_records = sorted(
+                response.data,
+                key=lambda x: x['total_usage'],
+                reverse=True
+            )
+
+            # Return top N
+            return sorted_records[:limit]
+
+        except Exception as e:
+            logger.error(f"Error getting top personality usage for {user_id}: {e}")
+            return []
+
     # ================================================
     # MONETIZATION: GROUP MEMBERSHIP CACHE
     # ================================================

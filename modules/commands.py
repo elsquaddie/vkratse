@@ -525,6 +525,24 @@ async def mystatus_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     else:
         message += "\n🎭 Личности: 5 использований/день (кроме Нейтральной)\n"
 
+        # Show top 3 used personalities for Free users
+        top_personalities = await db.get_top_personality_usage(user_id, date.today(), limit=3)
+        if top_personalities:
+            message += "\nИспользовано сегодня:\n"
+            for pu in top_personalities:
+                personality_name = pu.get('personality_name', 'Unknown')
+                summary_count = pu.get('summary_count', 0)
+                chat_count = pu.get('chat_count', 0)
+                judge_count = pu.get('judge_count', 0)
+                total = pu.get('total_usage', 0)
+
+                # Get personality display name
+                personality = db.get_personality(personality_name)
+                display_name = personality.display_name if personality else personality_name
+
+                message += f"  • {display_name}: {total}/15 "
+                message += f"(📝{summary_count} 💬{chat_count} ⚖️{judge_count})\n"
+
     # Call to action for Free users
     if tier == 'free':
         message += "\n💡 Обновись до Pro: /premium"

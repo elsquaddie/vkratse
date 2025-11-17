@@ -25,6 +25,9 @@ aiohttp==3.10.10
 # Utilities
 python-dateutil==2.9.0
 
+# Payment Processing
+yookassa==3.3.0
+
 # For Vercel Serverless Functions
 # (Vercel automatically provides these, but good to specify)
 flask==3.0.3

@@ -303,10 +303,88 @@ async def handle_start_menu_callback(update: Update, context: ContextTypes.DEFAU
             await query.edit_message_text(message, reply_markup=reply_markup)
 
         elif action == "buy_pro":
-            # Show instructions for buying Pro
+            # Show payment options for Pro subscription
+            from services.payments import is_yookassa_configured
+
             message = "💳 Купить Pro подписку\n\n"
+            message += "💵 Цена: $2.99/месяц (30 дней)\n\n"
+            message += "Выбери способ оплаты:"
+
+            keyboard = []
+
+            # YooKassa payment (if configured)
+            if is_yookassa_configured():
+                keyboard.append([InlineKeyboardButton("💳 Банковская карта", callback_data=sign_callback_data("buy_pro_card"))])
+
+            # Tribute donation (if configured)
+            if config.TRIBUTE_URL and config.TRIBUTE_URL != 'https://tribute.to/your_bot_page':
+                keyboard.append([InlineKeyboardButton("🎁 Tribute.to (донат)", callback_data=sign_callback_data("buy_pro_tribute"))])
+
+            # Back button
+            keyboard.append([InlineKeyboardButton("« Назад", callback_data=sign_callback_data("show_premium"))])
+
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_text(message, reply_markup=reply_markup)
+
+        elif action == "buy_pro_card":
+            # Create payment link via YooKassa
+            from services.payments import create_payment_link, PaymentError, get_pricing_info
+
+            user_id = query.from_user.id
+
+            try:
+                # Show loading message
+                await query.edit_message_text("⏳ Создаю платежную ссылку...")
+
+                # Get pricing
+                pricing = get_pricing_info('pro_monthly')
+
+                # Create payment
+                payment_info = await create_payment_link(
+                    user_id=user_id,
+                    tier=pricing['tier'],
+                    duration_days=pricing['duration_days'],
+                    amount_usd=pricing['amount_usd']
+                )
+
+                # Show payment link
+                message = "💳 Оплата Pro подписки\n\n"
+                message += f"💵 Сумма: ${payment_info['amount']:.2f}\n"
+                message += f"⏰ Срок: {pricing['duration_days']} дней\n\n"
+                message += "После оплаты подписка активируется автоматически!\n\n"
+                message += "⚠️ Ссылка действительна 1 час"
+
+                keyboard = [
+                    [InlineKeyboardButton("💳 Оплатить", url=payment_info['payment_url'])],
+                    [InlineKeyboardButton("« Назад", callback_data=sign_callback_data("buy_pro"))]
+                ]
+
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                await query.edit_message_text(message, reply_markup=reply_markup)
+
+            except PaymentError as e:
+                logger.error(f"Payment error for user {user_id}: {e}")
+                await query.edit_message_text(
+                    f"❌ {str(e)}\n\n"
+                    f"Попробуйте другой способ оплаты.",
+                    reply_markup=InlineKeyboardMarkup([[
+                        InlineKeyboardButton("« Назад", callback_data=sign_callback_data("buy_pro"))
+                    ]])
+                )
+            except Exception as e:
+                logger.error(f"Unexpected error creating payment: {e}", exc_info=True)
+                await query.edit_message_text(
+                    "❌ Произошла ошибка. Попробуйте позже или используйте другой способ оплаты.",
+                    reply_markup=InlineKeyboardMarkup([[
+                        InlineKeyboardButton("« Назад", callback_data=sign_callback_data("buy_pro"))
+                    ]])
+                )
+
+        elif action == "buy_pro_tribute":
+            # Show instructions for Tribute donation
+            message = "🎁 Оплата через Tribute.to\n\n"
             message += "Для покупки Pro-подписки:\n\n"
-            message += "1️⃣ Сделай донат через Tribute.to\n"
+            message += "1️⃣ Сделай донат $2.99 через Tribute.to\n"
             message += "2️⃣ Напиши админу с подтверждением оплаты\n"
             message += "3️⃣ Получи доступ к Pro функциям!\n\n"
             message += "💵 Цена: $2.99/месяц\n"
@@ -315,8 +393,8 @@ async def handle_start_menu_callback(update: Update, context: ContextTypes.DEFAU
 
             keyboard = []
             if config.TRIBUTE_URL and config.TRIBUTE_URL != 'https://tribute.to/your_bot_page':
-                keyboard.append([InlineKeyboardButton("🎁 Оплатить через Tribute", url=config.TRIBUTE_URL)])
-            keyboard.append([InlineKeyboardButton("« Назад", callback_data=sign_callback_data("show_premium"))])
+                keyboard.append([InlineKeyboardButton("🎁 Перейти к Tribute", url=config.TRIBUTE_URL)])
+            keyboard.append([InlineKeyboardButton("« Назад", callback_data=sign_callback_data("buy_pro"))])
 
             reply_markup = InlineKeyboardMarkup(keyboard)
             await query.edit_message_text(message, reply_markup=reply_markup)

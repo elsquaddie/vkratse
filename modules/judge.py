@@ -96,7 +96,9 @@ async def receive_dispute_description(update: Update, context: ContextTypes.DEFA
         context="select",
         current_personality=None,  # No default selection - user must choose
         extra_callback_data={"chat_id": chat_id},
-        show_create_button=False  # Don't show create button in judge context
+        show_create_button=False,  # Don't show create button in judge context
+        show_back_button=True,  # Show back button to cancel judge
+        back_callback="judge_cancel"
     )
 
     await update.message.reply_text(
@@ -120,6 +122,28 @@ async def cancel_judge(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     )
 
     return ConversationHandler.END
+
+
+async def handle_judge_cancel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle 'Back' button click during judge personality selection"""
+    from utils.security import verify_callback_data
+
+    query = update.callback_query
+    await query.answer()
+
+    # Verify HMAC signature
+    if not verify_callback_data(query.data):
+        await query.edit_message_text("❌ Неверная подпись данных.")
+        return
+
+    # Clear context
+    context.user_data.pop('judge_dispute_text', None)
+    context.user_data.pop('judge_chat_id', None)
+
+    await query.edit_message_text(
+        "❌ Судейство отменено.\n\n"
+        "Чтобы начать заново, используй /rassudi"
+    )
 
 
 async def handle_judge_personality_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

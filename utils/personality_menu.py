@@ -217,6 +217,19 @@ def _build_callback_data(
 
         return f"{callback_prefix}:{callback_base}:{signature}"
 
+    elif callback_prefix == "dm_summary_personality":
+        # Format: "dm_summary_personality:<chat_id>:<personality_id>:<signature>"
+        # For DM summaries - shows timeframe menu after selection
+        chat_id = extra_data.get("chat_id") if extra_data else 0
+
+        callback_base = f"{chat_id}:{personality.id}"
+        signature = create_string_signature(callback_base, user_id)
+
+        from config import logger
+        logger.info(f"[DM SUMMARY SIGNATURE GEN] Creating callback for dm_summary_personality: callback_base='{callback_base}', user_id={user_id}, signature={signature}")
+
+        return f"{callback_prefix}:{callback_base}:{signature}"
+
     else:
         # Default fallback
         return f"{callback_prefix}:{personality.name}"

@@ -338,16 +338,16 @@ def create_bot_application():
         handle_direct_message
     ))
 
-    # Handle group chat messages during active sessions (must be before log_message_to_db)
-    app.add_handler(MessageHandler(
-        filters.TEXT & ~filters.COMMAND & filters.ChatType.GROUPS,
-        handle_group_chat_message
-    ))
-
-    # Log all messages to database (for groups)
+    # Log all messages to database FIRST (for groups) - must run before other handlers
     app.add_handler(MessageHandler(
         filters.TEXT & ~filters.COMMAND & filters.ChatType.GROUPS,
         log_message_to_db
+    ))
+
+    # Handle group chat messages during active sessions (runs after logging)
+    app.add_handler(MessageHandler(
+        filters.TEXT & ~filters.COMMAND & filters.ChatType.GROUPS,
+        handle_group_chat_message
     ))
 
     # Handle bot being added/removed from chats

@@ -312,6 +312,9 @@ async def handle_start_menu_callback(update: Update, context: ContextTypes.DEFAU
 
             keyboard = []
 
+            # Telegram Stars payment (native, always available)
+            keyboard.append([InlineKeyboardButton("⭐ Telegram Stars (300 ⭐)", callback_data=sign_callback_data("buy_pro_stars"))])
+
             # YooKassa payment (if configured)
             if is_yookassa_configured():
                 keyboard.append([InlineKeyboardButton("💳 Банковская карта", callback_data=sign_callback_data("buy_pro_card"))])
@@ -398,6 +401,60 @@ async def handle_start_menu_callback(update: Update, context: ContextTypes.DEFAU
 
             reply_markup = InlineKeyboardMarkup(keyboard)
             await query.edit_message_text(message, reply_markup=reply_markup)
+
+        elif action == "buy_pro_stars":
+            # Create invoice for Telegram Stars payment
+            from services.payments import create_stars_invoice, PaymentError, get_stars_pricing_info
+
+            user_id = query.from_user.id
+
+            try:
+                # Show loading message
+                await query.edit_message_text("⏳ Создаю счёт для оплаты...")
+
+                # Get pricing info
+                pricing = get_stars_pricing_info('pro_monthly')
+
+                # Create Stars invoice
+                result = await create_stars_invoice(
+                    bot=context.bot,
+                    user_id=user_id,
+                    plan='pro_monthly'
+                )
+
+                # After invoice is sent, show confirmation message
+                message = "⭐ Счёт для оплаты отправлен!\n\n"
+                message += f"💰 Сумма: {pricing['stars_amount']} Stars (~${pricing['stars_amount']/100:.2f})\n"
+                message += f"⏰ Срок: {pricing['duration_days']} дней\n\n"
+                message += "После оплаты подписка активируется автоматически!\n\n"
+                message += "ℹ️ Telegram Stars можно купить в приложении Telegram"
+
+                keyboard = [
+                    [InlineKeyboardButton("« Назад", callback_data=sign_callback_data("buy_pro"))]
+                ]
+
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                await query.edit_message_text(message, reply_markup=reply_markup)
+
+                logger.info(f"Stars invoice created for user {user_id}")
+
+            except PaymentError as e:
+                logger.error(f"Stars payment error for user {user_id}: {e}")
+                await query.edit_message_text(
+                    f"❌ {str(e)}\n\n"
+                    f"Попробуйте другой способ оплаты.",
+                    reply_markup=InlineKeyboardMarkup([[
+                        InlineKeyboardButton("« Назад", callback_data=sign_callback_data("buy_pro"))
+                    ]])
+                )
+            except Exception as e:
+                logger.error(f"Unexpected error creating Stars invoice: {e}", exc_info=True)
+                await query.edit_message_text(
+                    "❌ Произошла ошибка. Попробуйте позже или используйте другой способ оплаты.",
+                    reply_markup=InlineKeyboardMarkup([[
+                        InlineKeyboardButton("« Назад", callback_data=sign_callback_data("buy_pro"))
+                    ]])
+                )
 
         else:
             await query.edit_message_text("❌ Неизвестное действие. Попробуй /start")
@@ -759,4 +816,209 @@ async def grantpro_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             f"❌ Критическая ошибка при активации подписки.\n"
             f"Ошибка: {str(e)}\n\n"
             f"Проверьте логи для подробностей."
+        )
+
+
+# ================================================
+# TELEGRAM STARS PAYMENT HANDLERS
+# ================================================
+
+async def handle_pre_checkout_query(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Handle PreCheckoutQuery for Telegram Stars payments
+
+    This handler is called BEFORE the payment is processed.
+    We need to answer OK to allow the payment to proceed.
+
+    Security:
+        - Validates payload format
+        - Logs all pre-checkout attempts
+        - Always answers OK (additional validation in SuccessfulPayment)
+
+    Note:
+        According to Telegram docs, we must answer within 10 seconds
+    """
+    query = update.pre_checkout_query
+    user_id = query.from_user.id
+    payload = query.invoice_payload
+
+    try:
+        logger.info(
+            f"PreCheckoutQuery received: "
+            f"user={user_id}, payload={payload}, "
+            f"currency={query.currency}, amount={query.total_amount}"
+        )
+
+        # Validate payload format
+        # Expected format: "stars_<user_id>_<tier>_<days>_<timestamp>"
+        if not payload.startswith("stars_"):
+            logger.warning(f"Invalid payload format: {payload}")
+            await query.answer(
+                ok=False,
+                error_message="Недействительный счёт. Попробуйте создать новый."
+            )
+            return
+
+        # Parse payload
+        parts = payload.split("_")
+        if len(parts) != 5:
+            logger.warning(f"Invalid payload structure: {payload}")
+            await query.answer(
+                ok=False,
+                error_message="Ошибка обработки счёта. Попробуйте создать новый."
+            )
+            return
+
+        # Extract user_id from payload for verification
+        payload_user_id = int(parts[1])
+
+        # Verify user_id matches
+        if payload_user_id != user_id:
+            logger.error(
+                f"User ID mismatch: payload={payload_user_id}, actual={user_id}"
+            )
+            await query.answer(
+                ok=False,
+                error_message="Ошибка безопасности. Обратитесь в поддержку."
+            )
+            return
+
+        # All checks passed - approve payment
+        await query.answer(ok=True)
+        logger.info(f"PreCheckoutQuery approved for user {user_id}")
+
+    except ValueError as e:
+        logger.error(f"Error parsing payload '{payload}': {e}")
+        await query.answer(
+            ok=False,
+            error_message="Ошибка обработки данных. Попробуйте создать новый счёт."
+        )
+    except Exception as e:
+        logger.error(f"Error in PreCheckoutQuery handler: {e}", exc_info=True)
+        # In case of error, still approve to avoid blocking user
+        # Validation will happen in SuccessfulPayment handler
+        await query.answer(ok=True)
+
+
+async def handle_successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Handle SuccessfulPayment for Telegram Stars
+
+    This handler is called AFTER the payment has been successfully processed.
+    We need to activate the subscription for the user.
+
+    Security:
+        - Verifies payload format and user_id
+        - Creates unique transaction_id for audit trail
+        - Full logging of all operations
+        - Notifies user about activation
+
+    Flow:
+        1. Extract payment details from update
+        2. Parse payload to get tier and duration
+        3. Activate subscription in database
+        4. Send confirmation to user
+    """
+    user_id = update.effective_user.id
+    payment = update.message.successful_payment
+
+    try:
+        logger.info(
+            f"SuccessfulPayment received: "
+            f"user={user_id}, currency={payment.currency}, "
+            f"amount={payment.total_amount}, payload={payment.invoice_payload}"
+        )
+
+        # Parse payload
+        # Format: "stars_<user_id>_<tier>_<days>_<timestamp>"
+        payload = payment.invoice_payload
+        parts = payload.split("_")
+
+        if len(parts) != 5 or parts[0] != "stars":
+            logger.error(f"Invalid payment payload: {payload}")
+            await update.message.reply_text(
+                "❌ Ошибка обработки платежа.\n"
+                "Обратитесь в поддержку с номером транзакции:\n"
+                f"`{payment.telegram_payment_charge_id}`",
+                parse_mode='Markdown'
+            )
+            return
+
+        # Extract data
+        payload_user_id = int(parts[1])
+        tier = parts[2]
+        duration_days = int(parts[3])
+        timestamp = int(parts[4])
+
+        # Verify user_id (double-check for security)
+        if payload_user_id != user_id:
+            logger.error(
+                f"SuccessfulPayment: User ID mismatch! "
+                f"payload={payload_user_id}, actual={user_id}"
+            )
+            await update.message.reply_text(
+                "❌ Ошибка безопасности при обработке платежа.\n"
+                "Обратитесь в поддержку."
+            )
+            return
+
+        # Import subscription service
+        from services import DBService, SubscriptionService
+        from datetime import datetime, timedelta
+
+        db = DBService()
+        sub_service = SubscriptionService(db)
+
+        # Create or update subscription
+        success = await sub_service.create_or_update_subscription(
+            user_id=user_id,
+            tier=tier,
+            duration_days=duration_days,
+            payment_method='telegram_stars',
+            transaction_id=payment.telegram_payment_charge_id
+        )
+
+        if success:
+            # Calculate expiry date
+            expires_at = datetime.now() + timedelta(days=duration_days)
+
+            # Send success message
+            await update.message.reply_text(
+                f"🎉 Оплата прошла успешно!\n\n"
+                f"Pro-подписка активирована на {duration_days} дней.\n\n"
+                f"Теперь доступны:\n"
+                f"• Безлимитные личности ♾️\n"
+                f"• 500 сообщений/день\n"
+                f"• 20 саммари в группах/день\n"
+                f"• 3 кастомные личности\n"
+                f"• Приоритетная обработка\n\n"
+                f"Проверить статус: /mystatus\n"
+                f"Подписка истекает: {expires_at.strftime('%Y-%m-%d')}"
+            )
+
+            logger.info(
+                f"Pro subscription activated via Stars: "
+                f"user={user_id}, tier={tier}, days={duration_days}, "
+                f"tx_id={payment.telegram_payment_charge_id}"
+            )
+        else:
+            logger.error(f"Failed to activate subscription for user {user_id}")
+            await update.message.reply_text(
+                "❌ Платеж получен, но возникла ошибка при активации подписки.\n\n"
+                "Обратитесь в поддержку с номером транзакции:\n"
+                f"`{payment.telegram_payment_charge_id}`",
+                parse_mode='Markdown'
+            )
+
+    except ValueError as e:
+        logger.error(f"Error parsing payment data: {e}")
+        await update.message.reply_text(
+            "❌ Ошибка обработки данных платежа.\n"
+            "Обратитесь в поддержку."
+        )
+    except Exception as e:
+        logger.error(f"Error in SuccessfulPayment handler: {e}", exc_info=True)
+        await update.message.reply_text(
+            "❌ Критическая ошибка при обработке платежа.\n"
+            "Ваши средства не потеряны. Обратитесь в поддержку."
         )

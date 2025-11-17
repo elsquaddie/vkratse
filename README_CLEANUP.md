@@ -1,7 +1,7 @@
 # Инструкция по запуску cleanup скрипта
 
 ## Что делает скрипт
-`scripts/cleanup_old_messages.py` удаляет ВСЕ сообщения старше `MESSAGE_RETENTION_DAYS` (2 дня) из БД.
+`scripts/cleanup_old_messages.py` удаляет ВСЕ сообщения старше `MESSAGE_RETENTION_DAYS` (3 дня) из БД.
 
 ## Зачем он нужен?
 Автоудаление работает только при новых сообщениях в чате. Если в чате давно не писали - старые данные остаются. Этот скрипт удаляет их одноразово.
@@ -30,7 +30,7 @@ TELEGRAM_BOT_TOKEN=твой_токен_бота
 ANTHROPIC_API_KEY=твой_api_key
 SUPABASE_URL=https://xxx.supabase.co
 SUPABASE_KEY=твой_supabase_key
-MESSAGE_RETENTION_DAYS=2
+MESSAGE_RETENTION_DAYS=3
 ```
 
 ### 3. Запустить скрипт
@@ -44,9 +44,9 @@ python3 scripts/cleanup_old_messages.py
 ```
 ============================================================
 Starting cleanup of old messages
-Retention policy: 2 days
+Retention policy: 3 days
 ============================================================
-Deleting messages older than: 2025-11-12T16:00:00+00:00
+Deleting messages older than: 2025-11-14T16:00:00+00:00
 
 Fetching statistics before cleanup...
 

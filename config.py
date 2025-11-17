@@ -37,7 +37,7 @@ SECRET_KEY = os.getenv('SECRET_KEY', 'default_secret_CHANGE_ME_in_production')
 # ================================================
 
 # Message retention (days) - auto-delete messages older than this
-MESSAGE_RETENTION_DAYS = int(os.getenv('MESSAGE_RETENTION_DAYS', 2))
+MESSAGE_RETENTION_DAYS = int(os.getenv('MESSAGE_RETENTION_DAYS', 3))
 
 # Default summary period (in hours)
 DEFAULT_SUMMARY_HOURS = int(os.getenv('DEFAULT_SUMMARY_HOURS', 24))
@@ -53,7 +53,7 @@ RATE_LIMIT_REQUESTS = int(os.getenv('RATE_LIMIT_REQUESTS', 10))
 RATE_LIMIT_WINDOW = int(os.getenv('RATE_LIMIT_WINDOW', 60))  # seconds
 
 # Message limits for summaries
-MAX_MESSAGES_PER_SUMMARY = int(os.getenv('MAX_MESSAGES_PER_SUMMARY', 500))
+MAX_MESSAGES_PER_SUMMARY = int(os.getenv('MAX_MESSAGES_PER_SUMMARY', 400))
 DEFAULT_MESSAGE_LIMIT = int(os.getenv('DEFAULT_MESSAGE_LIMIT', 50))
 
 # Custom personality limits

@@ -20,6 +20,79 @@ from utils.upgrade_messages import show_upgrade_message
 AWAITING_DISPUTE_DESCRIPTION = 1
 
 
+async def start_judge_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """
+    Handle 'start_judge' callback - entry point via button instead of command
+    Same logic as judge_command but triggered by inline button
+    """
+    from utils.security import verify_callback_data
+
+    query = update.callback_query
+    await query.answer()
+
+    # Verify HMAC signature
+    if not verify_callback_data(query.data):
+        await query.edit_message_text("❌ Неверная подпись данных.")
+        return ConversationHandler.END
+
+    user = query.from_user
+    chat = update.effective_chat
+    db = DBService()
+    subscription = SubscriptionService(db)
+
+    # ================================================
+    # MONETIZATION: Check usage limit for judge
+    # ================================================
+    limit_check = await subscription.check_usage_limit(user.id, 'judge')
+
+    if not limit_check['can_proceed']:
+        # User has exceeded their daily judge limit
+        await show_upgrade_message(
+            update=update,
+            reason="Лимит судейства исчерпан",
+            tier=limit_check['tier'],
+            limit_type='judge',
+            current=limit_check['current'],
+            limit=limit_check['limit']
+        )
+        return ConversationHandler.END
+
+    # Rate limit check
+    ok, remaining = check_rate_limit(user.id)
+    if not ok:
+        await query.edit_message_text(
+            f"⏰ Слишком много запросов. Подожди {remaining} секунд."
+        )
+        return ConversationHandler.END
+
+    # Cooldown check
+    ok, remaining = check_cooldown(chat.id, 'judge')
+    if not ok:
+        await query.edit_message_text(
+            f"⏰ Чат на кулдауне. Подожди {remaining} секунд."
+        )
+        return ConversationHandler.END
+
+    # Save chat_id and user_id in bot_data for persistence
+    judge_key = f"judge_{chat.id}_{user.id}"
+    context.bot_data[judge_key] = {
+        'chat_id': chat.id,
+        'user_id': user.id
+    }
+
+    # Ask user to describe the dispute
+    await query.edit_message_text(
+        "⚖️ Опиши спор в следующем сообщении!\n\n"
+        "Например:\n"
+        "• Дамирка и Настька поспорили о плоской земле. Кто прав?\n"
+        "• Ребята поругались насчёт Python vs JavaScript\n\n"
+        "Я проанализирую контекст беседы и рассужу спор в выбранном стиле!\n\n"
+        "Чтобы отменить, напиши /cancel"
+    )
+
+    return AWAITING_DISPUTE_DESCRIPTION
+
+
 async def judge_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """
     Handle /рассуди command - entry point for conversation
@@ -65,8 +138,13 @@ async def judge_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         )
         return ConversationHandler.END
 
-    # Save chat_id for later use
-    context.user_data['judge_chat_id'] = chat.id
+    # Save chat_id and user_id in bot_data for persistence
+    # Using bot_data instead of user_data for better serverless persistence
+    judge_key = f"judge_{chat.id}_{user.id}"
+    context.bot_data[judge_key] = {
+        'chat_id': chat.id,
+        'user_id': user.id
+    }
 
     # Ask user to describe the dispute
     await update.message.reply_text(
@@ -86,8 +164,21 @@ async def receive_dispute_description(update: Update, context: ContextTypes.DEFA
     Receive dispute description from user and show personality selection menu
     """
     user = update.effective_user
-    chat_id = context.user_data.get('judge_chat_id')
+    chat = update.effective_chat
     dispute_text = update.message.text.strip()
+
+    # Get chat_id from bot_data
+    judge_key = f"judge_{chat.id}_{user.id}"
+    judge_data = context.bot_data.get(judge_key)
+
+    if not judge_data:
+        await update.message.reply_text(
+            "❌ Сессия судейства потеряна. Попробуй снова:\n"
+            f"/{config.COMMAND_JUDGE}"
+        )
+        return ConversationHandler.END
+
+    chat_id = judge_data['chat_id']
 
     # Validate description length
     if len(dispute_text) < 10:
@@ -104,8 +195,8 @@ async def receive_dispute_description(update: Update, context: ContextTypes.DEFA
         )
         return AWAITING_DISPUTE_DESCRIPTION
 
-    # Save dispute description to context for callback handler
-    context.user_data['judge_dispute_text'] = dispute_text
+    # Save dispute description to bot_data for persistence
+    context.bot_data[judge_key]['dispute_text'] = dispute_text
 
     # Show personality selection menu
     from utils import build_personality_menu
@@ -132,9 +223,12 @@ async def receive_dispute_description(update: Update, context: ContextTypes.DEFA
 
 async def cancel_judge(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Cancel judge conversation"""
-    # Clear context
-    context.user_data.pop('judge_dispute_text', None)
-    context.user_data.pop('judge_chat_id', None)
+    user = update.effective_user
+    chat = update.effective_chat
+
+    # Clear bot_data
+    judge_key = f"judge_{chat.id}_{user.id}"
+    context.bot_data.pop(judge_key, None)
 
     await update.message.reply_text(
         "❌ Судейство отменено.\n\n"
@@ -156,9 +250,12 @@ async def handle_judge_cancel_callback(update: Update, context: ContextTypes.DEF
         await query.edit_message_text("❌ Неверная подпись данных.")
         return
 
-    # Clear context
-    context.user_data.pop('judge_dispute_text', None)
-    context.user_data.pop('judge_chat_id', None)
+    user = query.from_user
+    chat = update.effective_chat
+
+    # Clear bot_data
+    judge_key = f"judge_{chat.id}_{user.id}"
+    context.bot_data.pop(judge_key, None)
 
     await query.edit_message_text(
         "❌ Судейство отменено.\n\n"
@@ -209,14 +306,18 @@ async def handle_judge_personality_callback(update: Update, context: ContextType
 
         logger.info(f"[JUDGE SIGNATURE CHECK] SUCCESS for judge_personality")
 
-        # Get dispute description from context
-        dispute_text = context.user_data.get('judge_dispute_text')
-        if not dispute_text:
+        # Get dispute description from bot_data
+        judge_key = f"judge_{chat_id}_{user.id}"
+        judge_data = context.bot_data.get(judge_key)
+
+        if not judge_data or 'dispute_text' not in judge_data:
             await query.edit_message_text(
                 "❌ Контекст спора потерян. Попробуй снова:\n"
-                f"/{config.COMMAND_JUDGE} <описание спора>"
+                f"/{config.COMMAND_JUDGE}"
             )
             return
+
+        dispute_text = judge_data['dispute_text']
 
         # Get personality
         personality = db.get_personality_by_id(personality_id)
@@ -295,9 +396,9 @@ async def handle_judge_personality_callback(update: Update, context: ContextType
             'personality': personality.name
         })
 
-        # Clear context
-        context.user_data.pop('judge_dispute_text', None)
-        context.user_data.pop('judge_chat_id', None)
+        # Clear bot_data
+        judge_key = f"judge_{chat_id}_{user.id}"
+        context.bot_data.pop(judge_key, None)
 
     except Exception as e:
         logger.error(f"Error in judge personality callback: {e}")

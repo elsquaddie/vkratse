@@ -104,6 +104,7 @@ try:
     )
     from modules.judge import (
         judge_command,
+        start_judge_callback,
         handle_judge_personality_callback,
         handle_judge_cancel_callback,
         receive_dispute_description,
@@ -354,7 +355,8 @@ def create_bot_application():
     # Judge command with ConversationHandler (groups only)
     judge_conv = ConversationHandler(
         entry_points=[
-            CommandHandler(config.COMMAND_JUDGE, judge_command, filters=filters.ChatType.GROUPS)
+            CommandHandler(config.COMMAND_JUDGE, judge_command, filters=filters.ChatType.GROUPS),
+            CallbackQueryHandler(start_judge_callback, pattern="^start_judge:")  # Via button
         ],
         states={
             AWAITING_DISPUTE_DESCRIPTION: [

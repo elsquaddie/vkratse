@@ -234,31 +234,21 @@ async def handle_start_menu_callback(update: Update, context: ContextTypes.DEFAU
             )
 
         elif action == "group_judge":
-            # Show concise instructions for /rassudi command with button that inserts command
-            from telegram import KeyboardButton, ReplyKeyboardMarkup
-
+            # Start judge flow directly via inline button
             text = f"""⚖️ Рассудить спор - бот поможет рассудить спор в выбранном стиле!
 
-Нажми кнопку ниже, чтобы начать, или введи:
+Нажми кнопку ниже и опиши спор в следующем сообщении.
+
+Или используй команду:
 /{config.COMMAND_JUDGE}
 
 Пример:
-/{config.COMMAND_JUDGE} Дамирка и Настька поспорили о плоской земле. Кто прав?"""
+Дамирка и Настька поспорили о плоской земле. Кто прав?"""
 
-            # ReplyKeyboard вставляет команду в поле ввода
-            keyboard = [[KeyboardButton(f"/{config.COMMAND_JUDGE}")]]
-            reply_markup = ReplyKeyboardMarkup(
-                keyboard,
-                resize_keyboard=True,  # Компактный размер
-                one_time_keyboard=True  # Исчезает после нажатия
-            )
-
-            # Send new message with reply keyboard (can't edit inline keyboard to reply keyboard)
-            await query.edit_message_text(text)
-            await update.effective_message.reply_text(
-                "👇 Нажми кнопку чтобы начать:",
-                reply_markup=reply_markup
-            )
+            # Inline button to start judge flow
+            keyboard = [[InlineKeyboardButton("⚖️ Начать судейство", callback_data=sign_callback_data("start_judge"))]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_text(text, reply_markup=reply_markup)
 
         elif action == "show_premium":
             # Show premium tiers (same logic as /premium command)

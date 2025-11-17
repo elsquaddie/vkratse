@@ -164,6 +164,16 @@ async def handle_personality_selection(
             await query.edit_message_text("❌ Личность не найдена. Попробуй /start")
             return
 
+        # Check if personality is blocked
+        if personality.is_blocked:
+            await query.answer(
+                "⚠️ Эта личность заблокирована.\n\n"
+                "Причина: ты вышел из группы проекта.\n"
+                "Вернись в группу, чтобы разблокировать её!",
+                show_alert=True
+            )
+            return
+
         # Save user's personality choice
         db_service.update_user_personality(user_id, personality.name, username)
 
@@ -253,6 +263,15 @@ async def handle_direct_message(
         if not personality:
             await update.message.reply_text(
                 f"❌ Личность не найдена. Выбери другую: /{config.COMMAND_PERSONALITY}"
+            )
+            return
+
+        # Check if personality is blocked
+        if personality.is_blocked:
+            await update.message.reply_text(
+                "⚠️ Выбранная личность заблокирована.\n\n"
+                "Причина: ты вышел из группы проекта.\n"
+                "Вернись в группу, чтобы разблокировать её, или выбери другую: /lichnost"
             )
             return
 

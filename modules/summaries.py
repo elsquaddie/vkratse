@@ -347,6 +347,16 @@ async def summary_personality_callback(update: Update, context: ContextTypes.DEF
         logger.error(f"Personality {personality_id} not found")
         return
 
+    # Check if personality is blocked
+    if personality.is_blocked:
+        await query.answer(
+            "⚠️ Эта личность заблокирована.\n\n"
+            "Причина: ты вышел из группы проекта.\n"
+            "Вернись в группу, чтобы разблокировать её!",
+            show_alert=True
+        )
+        return
+
     # If custom limit provided -> execute summary immediately
     if custom_limit != "none":
         try:

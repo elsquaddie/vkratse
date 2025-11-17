@@ -22,6 +22,8 @@ class Personality:
     is_active: bool
     created_at: datetime
     greeting_message: Optional[str] = None  # Added by migration 001_add_greetings.sql
+    is_group_bonus: bool = False  # Added by migration 007_add_personality_bonus_fields.sql
+    is_blocked: bool = False  # Added by migration 007_add_personality_bonus_fields.sql
 
     @classmethod
     def from_dict(cls, data: dict) -> 'Personality':
@@ -37,7 +39,9 @@ class Personality:
             is_active=data.get('is_active', True),
             created_at=data['created_at'] if isinstance(data['created_at'], datetime)
                       else datetime.fromisoformat(data['created_at'].replace('Z', '+00:00')),
-            greeting_message=data.get('greeting_message')
+            greeting_message=data.get('greeting_message'),
+            is_group_bonus=data.get('is_group_bonus', False),
+            is_blocked=data.get('is_blocked', False)
         )
 
     def to_dict(self) -> dict:
@@ -52,7 +56,9 @@ class Personality:
             'created_by_user_id': self.created_by_user_id,
             'is_active': self.is_active,
             'created_at': self.created_at.isoformat(),
-            'greeting_message': self.greeting_message
+            'greeting_message': self.greeting_message,
+            'is_group_bonus': self.is_group_bonus,
+            'is_blocked': self.is_blocked
         }
 
     def __str__(self) -> str:

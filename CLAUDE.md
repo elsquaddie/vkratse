@@ -184,7 +184,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```
 [Клик] → callback_query: "create_personality"
     ↓
-[Бот] → "Опиши стиль личности (10-500 символов):"
+[Бот] → "Опиши стиль личности (10-1500 символов):"
     ↓
 [Пользователь] → "Грубый математик, который объясняет через формулы"
     ↓
@@ -830,7 +830,7 @@ RATE_LIMIT_WINDOW=60
 MAX_MESSAGES_PER_SUMMARY=400
 DEFAULT_MESSAGE_LIMIT=50
 MAX_CUSTOM_PERSONALITIES_PER_USER=5
-MAX_PERSONALITY_DESCRIPTION_LENGTH=500
+MAX_PERSONALITY_DESCRIPTION_LENGTH=1500
 MIN_PERSONALITY_DESCRIPTION_LENGTH=10
 LOG_LEVEL=INFO
 

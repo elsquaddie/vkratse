@@ -2,7 +2,11 @@
 
 **Дата создания:** 2025-11-17
 **Статус:** В разработке
-**Прогресс:** 8/75 задач (11%)
+**Прогресс:** 13/75 задач (17%)
+
+**📝 Инструкции для тестирования:**
+- [QUICKSTART_MONETIZATION.md](./QUICKSTART_MONETIZATION.md) - Быстрый старт за 5 минут
+- [TESTING_MONETIZATION.md](./TESTING_MONETIZATION.md) - Полная инструкция по тестированию
 
 ---
 
@@ -130,9 +134,9 @@
 
 **Цель:** Реализовать логику определения тарифа пользователя
 
-- [ ] **2.1** Создать файл `services/subscription.py`
+- [x] **2.1** Создать файл `services/subscription.py`
 
-- [ ] **2.2** Реализовать `get_user_tier(user_id: int) -> str`
+- [x] **2.2** Реализовать `get_user_tier(user_id: int) -> str`
   ```python
   async def get_user_tier(user_id: int) -> str:
       """
@@ -152,16 +156,28 @@
       return subscription.tier
   ```
 
-- [ ] **2.3** Добавить в `db_service.py`: `get_subscription(user_id: int)`
+- [x] **2.3** Добавить в `db_service.py`: `get_subscription(user_id: int)`
 
-- [ ] **2.4** Добавить в `db_service.py`: `is_subscription_active(user_id: int) -> bool`
+- [x] **2.4** Добавить в `db_service.py`: методы для работы с подписками
+  - `get_subscription(user_id)`
+  - `create_or_update_subscription(...)`
+  - `deactivate_subscription(user_id)`
+  - `get_usage_limits(user_id, date)`
+  - `increment_usage_limit(user_id, action)`
+  - `get_personality_usage(user_id, personality, date)`
+  - `increment_personality_usage(user_id, personality, action)`
+  - `get_group_membership_cache(user_id)`
+  - `update_group_membership_cache(user_id, is_member)`
+  - `get_active_custom_personalities_count(user_id)`
+  - `block_excess_custom_personalities(user_id, limit)`
 
-- [ ] **2.5** Обновить `services/subscription.py`: добавить импорты и инициализацию db_service
+- [x] **2.5** Обновить `services/subscription.py`: добавить импорты и инициализацию db_service
 
 - [ ] **2.6 ТЕСТ:** Вручную добавить Pro-подписку в БД и проверить `get_user_tier()`
   - Добавить подписку с `is_active=True` → должна вернуть 'pro'
   - Изменить `is_active=False` → должна вернуть 'free'
   - Удалить запись → должна вернуть 'free'
+  - **См. инструкции:** [TESTING_MONETIZATION.md](./TESTING_MONETIZATION.md)
 
 ---
 

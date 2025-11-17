@@ -657,3 +657,395 @@ class DBService:
         except Exception as e:
             logger.error(f"Error cleaning up inactive sessions: {e}")
             return 0
+
+    # ================================================
+    # MONETIZATION: SUBSCRIPTIONS
+    # ================================================
+
+    async def get_subscription(self, user_id: int) -> Optional[dict]:
+        """
+        Get user's subscription info
+
+        Args:
+            user_id: Telegram user ID
+
+        Returns:
+            Subscription dict or None
+        """
+        try:
+            response = self.client.table('subscriptions')\
+                .select('*')\
+                .eq('user_id', user_id)\
+                .single()\
+                .execute()
+
+            return response.data if response.data else None
+        except Exception:
+            # No subscription found
+            return None
+
+    async def create_or_update_subscription(
+        self,
+        user_id: int,
+        tier: str,
+        duration_days: int,
+        payment_method: str = 'manual',
+        transaction_id: Optional[str] = None
+    ) -> bool:
+        """
+        Create or update user subscription
+
+        Args:
+            user_id: Telegram user ID
+            tier: 'free' or 'pro'
+            duration_days: Number of days for subscription
+            payment_method: 'manual', 'tribute', 'yookassa', 'telegram_stars'
+            transaction_id: Optional transaction ID
+
+        Returns:
+            True if successful
+        """
+        try:
+            expires_at = datetime.now(timezone.utc) + timedelta(days=duration_days)
+
+            self.client.table('subscriptions').upsert({
+                'user_id': user_id,
+                'tier': tier,
+                'expires_at': expires_at.isoformat(),
+                'payment_method': payment_method,
+                'transaction_id': transaction_id,
+                'is_active': True,
+                'updated_at': datetime.now(timezone.utc).isoformat()
+            }).execute()
+
+            logger.info(f"Subscription created/updated for user {user_id}: {tier}, {duration_days} days")
+            return True
+        except Exception as e:
+            logger.error(f"Error creating/updating subscription for {user_id}: {e}")
+            return False
+
+    async def deactivate_subscription(self, user_id: int) -> bool:
+        """
+        Deactivate user's subscription
+
+        Args:
+            user_id: Telegram user ID
+
+        Returns:
+            True if successful
+        """
+        try:
+            self.client.table('subscriptions')\
+                .update({
+                    'is_active': False,
+                    'updated_at': datetime.now(timezone.utc).isoformat()
+                })\
+                .eq('user_id', user_id)\
+                .execute()
+
+            logger.info(f"Subscription deactivated for user {user_id}")
+            return True
+        except Exception as e:
+            logger.error(f"Error deactivating subscription for {user_id}: {e}")
+            return False
+
+    # ================================================
+    # MONETIZATION: USAGE LIMITS
+    # ================================================
+
+    async def get_usage_limits(self, user_id: int, date: 'date') -> Optional[dict]:
+        """
+        Get usage limits for a user on a specific date
+
+        Args:
+            user_id: Telegram user ID
+            date: Date to check
+
+        Returns:
+            Usage dict or None
+        """
+        try:
+            from datetime import date as date_type
+            date_str = date.isoformat()
+
+            response = self.client.table('usage_limits')\
+                .select('*')\
+                .eq('user_id', user_id)\
+                .eq('date', date_str)\
+                .single()\
+                .execute()
+
+            return response.data if response.data else None
+        except Exception:
+            # No usage record for this date
+            return None
+
+    async def increment_usage_limit(self, user_id: int, action: str) -> bool:
+        """
+        Increment usage counter for an action
+
+        Args:
+            user_id: Telegram user ID
+            action: 'message_dm', 'summary_dm', 'summary_group', 'judge'
+
+        Returns:
+            True if successful
+        """
+        try:
+            from datetime import date as date_type
+            today = date_type.today()
+
+            # Map action to field name
+            action_field_map = {
+                'message_dm': 'messages_count',
+                'summary_dm': 'summaries_dm_count',
+                'summary_group': 'summaries_count',
+                'judge': 'judge_count'
+            }
+
+            field_name = action_field_map.get(action, 'messages_count')
+
+            # Get current usage
+            current_usage = await self.get_usage_limits(user_id, today)
+
+            if current_usage:
+                # Increment existing record
+                new_value = current_usage.get(field_name, 0) + 1
+                self.client.table('usage_limits')\
+                    .update({field_name: new_value})\
+                    .eq('user_id', user_id)\
+                    .eq('date', today.isoformat())\
+                    .execute()
+            else:
+                # Create new record
+                self.client.table('usage_limits').insert({
+                    'user_id': user_id,
+                    'date': today.isoformat(),
+                    field_name: 1
+                }).execute()
+
+            return True
+        except Exception as e:
+            logger.error(f"Error incrementing usage limit for {user_id}, {action}: {e}")
+            return False
+
+    # ================================================
+    # MONETIZATION: PERSONALITY USAGE
+    # ================================================
+
+    async def get_personality_usage(
+        self,
+        user_id: int,
+        personality: str,
+        date: 'date'
+    ) -> Optional[dict]:
+        """
+        Get personality usage for a user on a specific date
+
+        Args:
+            user_id: Telegram user ID
+            personality: Personality name
+            date: Date to check
+
+        Returns:
+            Usage dict or None
+        """
+        try:
+            from datetime import date as date_type
+            date_str = date.isoformat()
+
+            response = self.client.table('personality_usage')\
+                .select('*')\
+                .eq('user_id', user_id)\
+                .eq('personality_name', personality)\
+                .eq('date', date_str)\
+                .single()\
+                .execute()
+
+            return response.data if response.data else None
+        except Exception:
+            # No usage record
+            return None
+
+    async def increment_personality_usage(
+        self,
+        user_id: int,
+        personality: str,
+        action: str
+    ) -> bool:
+        """
+        Increment personality usage counter
+
+        Args:
+            user_id: Telegram user ID
+            personality: Personality name
+            action: 'summary', 'chat', 'judge'
+
+        Returns:
+            True if successful
+        """
+        try:
+            from datetime import date as date_type
+            today = date_type.today()
+
+            # Map action to field name
+            action_field_map = {
+                'summary': 'summary_count',
+                'chat': 'chat_count',
+                'judge': 'judge_count'
+            }
+
+            field_name = action_field_map.get(action, 'summary_count')
+
+            # Get current usage
+            current_usage = await self.get_personality_usage(user_id, personality, today)
+
+            if current_usage:
+                # Increment existing record
+                new_value = current_usage.get(field_name, 0) + 1
+                self.client.table('personality_usage')\
+                    .update({field_name: new_value})\
+                    .eq('user_id', user_id)\
+                    .eq('personality_name', personality)\
+                    .eq('date', today.isoformat())\
+                    .execute()
+            else:
+                # Create new record
+                self.client.table('personality_usage').insert({
+                    'user_id': user_id,
+                    'personality_name': personality,
+                    'date': today.isoformat(),
+                    field_name: 1
+                }).execute()
+
+            return True
+        except Exception as e:
+            logger.error(f"Error incrementing personality usage for {user_id}, {personality}, {action}: {e}")
+            return False
+
+    # ================================================
+    # MONETIZATION: GROUP MEMBERSHIP CACHE
+    # ================================================
+
+    async def get_group_membership_cache(self, user_id: int) -> Optional[dict]:
+        """
+        Get cached group membership status
+
+        Args:
+            user_id: Telegram user ID
+
+        Returns:
+            Cache dict or None
+        """
+        try:
+            response = self.client.table('group_membership_cache')\
+                .select('*')\
+                .eq('user_id', user_id)\
+                .single()\
+                .execute()
+
+            return response.data if response.data else None
+        except Exception:
+            # No cache found
+            return None
+
+    async def update_group_membership_cache(
+        self,
+        user_id: int,
+        is_member: bool
+    ) -> bool:
+        """
+        Update group membership cache
+
+        Args:
+            user_id: Telegram user ID
+            is_member: Whether user is in the group
+
+        Returns:
+            True if successful
+        """
+        try:
+            self.client.table('group_membership_cache').upsert({
+                'user_id': user_id,
+                'is_member': is_member,
+                'checked_at': datetime.now(timezone.utc).isoformat()
+            }).execute()
+
+            return True
+        except Exception as e:
+            logger.error(f"Error updating group membership cache for {user_id}: {e}")
+            return False
+
+    # ================================================
+    # MONETIZATION: CUSTOM PERSONALITIES MANAGEMENT
+    # ================================================
+
+    async def get_active_custom_personalities_count(self, user_id: int) -> int:
+        """
+        Get count of active custom personalities for a user
+
+        Args:
+            user_id: Telegram user ID
+
+        Returns:
+            Count of active custom personalities
+        """
+        try:
+            response = self.client.table('personalities')\
+                .select('id', count='exact')\
+                .eq('created_by_user_id', user_id)\
+                .eq('is_custom', True)\
+                .eq('is_active', True)\
+                .execute()
+
+            return response.count if response.count else 0
+        except Exception as e:
+            logger.error(f"Error counting custom personalities for {user_id}: {e}")
+            return 0
+
+    async def block_excess_custom_personalities(
+        self,
+        user_id: int,
+        limit: int
+    ) -> bool:
+        """
+        Block (deactivate) custom personalities exceeding the limit
+
+        Args:
+            user_id: Telegram user ID
+            limit: Maximum allowed custom personalities
+
+        Returns:
+            True if successful
+        """
+        try:
+            # Get all custom personalities for this user
+            response = self.client.table('personalities')\
+                .select('id, name')\
+                .eq('created_by_user_id', user_id)\
+                .eq('is_custom', True)\
+                .eq('is_active', True)\
+                .order('created_at', desc=False)\
+                .execute()
+
+            personalities = response.data
+
+            # If count is within limit, nothing to do
+            if len(personalities) <= limit:
+                return True
+
+            # Block the excess ones (keep the oldest `limit` personalities)
+            to_block = personalities[limit:]
+
+            for p in to_block:
+                self.client.table('personalities')\
+                    .update({'is_active': False})\
+                    .eq('id', p['id'])\
+                    .execute()
+
+            logger.info(f"Blocked {len(to_block)} custom personalities for user {user_id}")
+            return True
+
+        except Exception as e:
+            logger.error(f"Error blocking excess personalities for {user_id}: {e}")
+            return False

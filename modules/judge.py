@@ -4,7 +4,7 @@ AI judges disputes in chat
 """
 
 from telegram import Update
-from telegram.ext import ContextTypes
+from telegram.ext import ContextTypes, ConversationHandler
 import config
 from config import logger
 from services import DBService, AIService
@@ -15,53 +15,79 @@ from utils import (
     verify_signature, create_signature
 )
 
+# ConversationHandler states
+AWAITING_DISPUTE_DESCRIPTION = 1
 
-async def judge_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+
+async def judge_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """
-    Handle /рассуди command
+    Handle /рассуди command - entry point for conversation
 
-    Examples:
-    /рассуди Дамирка и Настька поспорили о плоской земле. Кто прав?
-    /рассуди Ребята поругались насчёт Python vs JavaScript
+    NEW LOGIC: Simply asks user to describe the dispute in next message
+    No more need to type everything in one command!
     """
     user = update.effective_user
     chat = update.effective_chat
-    db = DBService()
 
-    # 1. Validate command is not empty
-    if not context.args or len(context.args) == 0:
-        await update.message.reply_text(
-            f"⚖️ Опиши спор!\n\n"
-            f"Например:\n"
-            f"/{config.COMMAND_JUDGE} Дамирка и Настька поспорили о плоской земле. Кто прав?\n\n"
-            f"Я проанализирую контекст беседы и рассужу спор в выбранном стиле!"
-        )
-        return
-
-    # 2. Get dispute description
-    dispute_text = " ".join(context.args)
-
-    # 3. Rate limit check
+    # Rate limit check
     ok, remaining = check_rate_limit(user.id)
     if not ok:
         await update.message.reply_text(
             f"⏰ Слишком много запросов. Подожди {remaining} секунд."
         )
-        return
+        return ConversationHandler.END
 
-    # 4. Cooldown check
+    # Cooldown check
     ok, remaining = check_cooldown(chat.id, 'judge')
     if not ok:
         await update.message.reply_text(
             f"⏰ Чат на кулдауне. Подожди {remaining} секунд."
         )
-        return
+        return ConversationHandler.END
 
-    # 5. Save dispute description to context for callback handler
-    context.user_data['judge_dispute_text'] = dispute_text
+    # Save chat_id for later use
     context.user_data['judge_chat_id'] = chat.id
 
-    # 6. Show personality selection menu
+    # Ask user to describe the dispute
+    await update.message.reply_text(
+        "⚖️ Опиши спор в следующем сообщении!\n\n"
+        "Например:\n"
+        "• Дамирка и Настька поспорили о плоской земле. Кто прав?\n"
+        "• Ребята поругались насчёт Python vs JavaScript\n\n"
+        "Я проанализирую контекст беседы и рассужу спор в выбранном стиле!\n\n"
+        "Чтобы отменить, напиши /cancel"
+    )
+
+    return AWAITING_DISPUTE_DESCRIPTION
+
+
+async def receive_dispute_description(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """
+    Receive dispute description from user and show personality selection menu
+    """
+    user = update.effective_user
+    chat_id = context.user_data.get('judge_chat_id')
+    dispute_text = update.message.text.strip()
+
+    # Validate description length
+    if len(dispute_text) < 10:
+        await update.message.reply_text(
+            "⚠️ Опиши спор подробнее (минимум 10 символов).\n\n"
+            "Попробуй ещё раз или /cancel для отмены."
+        )
+        return AWAITING_DISPUTE_DESCRIPTION
+
+    if len(dispute_text) > 500:
+        await update.message.reply_text(
+            "⚠️ Описание слишком длинное (максимум 500 символов).\n\n"
+            "Сократи описание или /cancel для отмены."
+        )
+        return AWAITING_DISPUTE_DESCRIPTION
+
+    # Save dispute description to context for callback handler
+    context.user_data['judge_dispute_text'] = dispute_text
+
+    # Show personality selection menu
     from utils import build_personality_menu
 
     keyboard = build_personality_menu(
@@ -69,7 +95,7 @@ async def judge_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         callback_prefix="judge_personality",
         context="select",
         current_personality=None,  # No default selection - user must choose
-        extra_callback_data={"chat_id": chat.id},
+        extra_callback_data={"chat_id": chat_id},
         show_create_button=False  # Don't show create button in judge context
     )
 
@@ -77,6 +103,23 @@ async def judge_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         "⚖️ Выбери стиль судейства:",
         reply_markup=keyboard
     )
+
+    # End conversation - callback handler will take over
+    return ConversationHandler.END
+
+
+async def cancel_judge(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Cancel judge conversation"""
+    # Clear context
+    context.user_data.pop('judge_dispute_text', None)
+    context.user_data.pop('judge_chat_id', None)
+
+    await update.message.reply_text(
+        "❌ Судейство отменено.\n\n"
+        "Чтобы начать заново, используй /rassudi"
+    )
+
+    return ConversationHandler.END
 
 
 async def handle_judge_personality_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

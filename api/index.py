@@ -97,7 +97,13 @@ try:
         summary_timeframe_callback,
         back_to_summary_personality_callback
     )
-    from modules.judge import judge_command, handle_judge_personality_callback
+    from modules.judge import (
+        judge_command,
+        handle_judge_personality_callback,
+        receive_dispute_description,
+        cancel_judge,
+        AWAITING_DISPUTE_DESCRIPTION
+    )
     from modules.personalities import (
         personality_command,
         personality_callback,
@@ -265,8 +271,25 @@ def create_bot_application():
     app.add_handler(CommandHandler(config.COMMAND_CHAT, chat_command))
     app.add_handler(CommandHandler(config.COMMAND_STOP, stop_command))
 
-    # Judge command
-    app.add_handler(CommandHandler(config.COMMAND_JUDGE, judge_command))
+    # Judge command with ConversationHandler
+    judge_conv = ConversationHandler(
+        entry_points=[
+            CommandHandler(config.COMMAND_JUDGE, judge_command)
+        ],
+        states={
+            AWAITING_DISPUTE_DESCRIPTION: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, receive_dispute_description)
+            ]
+        },
+        fallbacks=[
+            CommandHandler("cancel", cancel_judge)
+        ],
+        name="judge_conversation",
+        persistent=True  # Enable persistence for serverless environment
+    )
+    app.add_handler(judge_conv)
+
+    # Judge personality selection callback (outside ConversationHandler)
     app.add_handler(CallbackQueryHandler(
         handle_judge_personality_callback,
         pattern="^judge_personality:"

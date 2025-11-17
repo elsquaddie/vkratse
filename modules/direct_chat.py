@@ -13,11 +13,14 @@ import config
 from config import logger
 from services.db_service import DBService
 from services.ai_service import AIService
+from services.subscription import SubscriptionService
 from utils.security import sign_callback_data, verify_callback_data
+from utils.upgrade_messages import show_upgrade_message
 
 
 db_service = DBService()
 ai_service = AIService()
+subscription_service = SubscriptionService(db_service)
 
 
 async def show_personality_selection(
@@ -219,6 +222,23 @@ async def handle_direct_message(
     message_text = update.message.text
 
     try:
+        # ================================================
+        # MONETIZATION: Check usage limit for DM messages
+        # ================================================
+        limit_check = await subscription_service.check_usage_limit(user_id, 'messages_dm')
+
+        if not limit_check['can_proceed']:
+            # User has exceeded their daily message limit
+            await show_upgrade_message(
+                update=update,
+                reason="Лимит сообщений исчерпан",
+                tier=limit_check['tier'],
+                limit_type='messages',
+                current=limit_check['current'],
+                limit=limit_check['limit']
+            )
+            return
+
         # Check if user has selected a personality
         personality_name = db_service.get_user_personality(user_id)
         if not personality_name:
@@ -263,6 +283,11 @@ async def handle_direct_message(
             username="bot",
             message_text=response
         )
+
+        # ================================================
+        # MONETIZATION: Increment usage counter after successful response
+        # ================================================
+        await subscription_service.increment_usage(user_id, 'messages_dm')
 
         # Log analytics
         db_service.log_event(

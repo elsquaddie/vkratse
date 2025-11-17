@@ -8,7 +8,7 @@ from telegram.ext import ContextTypes
 from telegram.constants import ChatType
 import config
 from config import logger
-from services import DBService, AIService
+from services import DBService, AIService, SubscriptionService
 from utils import (
     check_cooldown, set_cooldown,
     check_rate_limit,
@@ -18,6 +18,7 @@ from utils import (
     parse_time_argument, get_default_period,
     build_personality_menu
 )
+from utils.upgrade_messages import show_upgrade_message
 
 
 def _build_timeframe_menu(user_id: int, chat_id: int, personality_id: int) -> InlineKeyboardMarkup:
@@ -102,6 +103,24 @@ async def _summary_in_group(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     user = update.effective_user
     chat = update.effective_chat
     db = DBService()
+    subscription = SubscriptionService(db)
+
+    # ================================================
+    # MONETIZATION: Check usage limit for group summaries
+    # ================================================
+    limit_check = await subscription.check_usage_limit(user.id, 'summaries_group')
+
+    if not limit_check['can_proceed']:
+        # User has exceeded their daily summary limit
+        await show_upgrade_message(
+            update=update,
+            reason="Лимит саммари в группах исчерпан",
+            tier=limit_check['tier'],
+            limit_type='summaries',
+            current=limit_check['current'],
+            limit=limit_check['limit']
+        )
+        return
 
     # 1. Rate limit check
     ok, remaining = check_rate_limit(user.id)
@@ -155,6 +174,24 @@ async def _summary_in_dm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     """Handle /sut in DM - show chat selection"""
     user = update.effective_user
     db = DBService()
+    subscription = SubscriptionService(db)
+
+    # ================================================
+    # MONETIZATION: Check usage limit for DM summaries
+    # ================================================
+    limit_check = await subscription.check_usage_limit(user.id, 'summaries_dm')
+
+    if not limit_check['can_proceed']:
+        # User has exceeded their daily DM summary limit
+        await show_upgrade_message(
+            update=update,
+            reason="Лимит саммари в ЛС исчерпан",
+            tier=limit_check['tier'],
+            limit_type='summaries',
+            current=limit_check['current'],
+            limit=limit_check['limit']
+        )
+        return
 
     # 1. Получить все чаты из БД
     all_chats = db.get_all_chats()
@@ -450,6 +487,25 @@ async def _execute_summary(
             f"💬 Сообщений: {len(messages)}\n\n"
             f"{summary}"
         )
+
+        # ================================================
+        # MONETIZATION: Increment usage counter after successful summary
+        # ================================================
+        subscription = SubscriptionService(db)
+
+        # Determine if summary is in DM or group
+        # Get chat info to determine type
+        try:
+            chat = await context.bot.get_chat(chat_id)
+            is_dm = chat.type == ChatType.PRIVATE
+        except Exception as e:
+            logger.warning(f"Could not determine chat type for {chat_id}: {e}")
+            # Default to group if we can't determine
+            is_dm = False
+
+        # Increment appropriate counter
+        action = 'summaries_dm' if is_dm else 'summaries_group'
+        await subscription.increment_usage(user.id, action)
 
         # Set cooldown
         set_cooldown(chat_id, 'summary')

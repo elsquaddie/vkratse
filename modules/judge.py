@@ -7,13 +7,14 @@ from telegram import Update
 from telegram.ext import ContextTypes, ConversationHandler
 import config
 from config import logger
-from services import DBService, AIService
+from services import DBService, AIService, SubscriptionService
 from utils import (
     check_cooldown, set_cooldown,
     check_rate_limit,
     extract_mentions,
     verify_signature, create_signature
 )
+from utils.upgrade_messages import show_upgrade_message
 
 # ConversationHandler states
 AWAITING_DISPUTE_DESCRIPTION = 1
@@ -28,6 +29,25 @@ async def judge_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     """
     user = update.effective_user
     chat = update.effective_chat
+    db = DBService()
+    subscription = SubscriptionService(db)
+
+    # ================================================
+    # MONETIZATION: Check usage limit for judge
+    # ================================================
+    limit_check = await subscription.check_usage_limit(user.id, 'judge')
+
+    if not limit_check['can_proceed']:
+        # User has exceeded their daily judge limit
+        await show_upgrade_message(
+            update=update,
+            reason="Лимит судейства исчерпан",
+            tier=limit_check['tier'],
+            limit_type='judge',
+            current=limit_check['current'],
+            limit=limit_check['limit']
+        )
+        return ConversationHandler.END
 
     # Rate limit check
     ok, remaining = check_rate_limit(user.id)
@@ -222,6 +242,12 @@ async def handle_judge_personality_callback(update: Update, context: ContextType
 
         # Edit the message with verdict
         await query.edit_message_text(verdict_message)
+
+        # ================================================
+        # MONETIZATION: Increment usage counter after successful verdict
+        # ================================================
+        subscription = SubscriptionService(db)
+        await subscription.increment_usage(user.id, 'judge')
 
         # Set cooldown
         set_cooldown(chat_id, 'judge')

@@ -451,6 +451,64 @@ class SubscriptionService:
                 'needs_pro': False
             }
 
+    async def handle_group_membership_change(
+        self,
+        user_id: int,
+        is_member: bool,
+        bot: Bot
+    ) -> None:
+        """
+        Handle user joining or leaving the project group
+
+        Args:
+            user_id: Telegram user ID
+            is_member: True if user joined, False if left
+            bot: Telegram Bot instance
+        """
+        try:
+            # Update cache
+            await self.db.update_group_membership_cache(user_id, is_member)
+            logger.info(f"Group membership changed for user {user_id}: is_member={is_member}")
+
+            if not is_member:
+                # User left the group - block bonus personalities
+                await self.db.block_group_bonus_personalities(user_id)
+                logger.info(f"Blocked bonus personalities for user {user_id}")
+
+                # Notify user
+                try:
+                    await bot.send_message(
+                        chat_id=user_id,
+                        text=(
+                            "⚠️ Ты вышел из группы проекта.\n\n"
+                            "Твоя бонусная кастомная личность временно заблокирована.\n"
+                            "Вернись в группу, чтобы разблокировать её!"
+                        )
+                    )
+                except TelegramError as e:
+                    logger.warning(f"Could not notify user {user_id} about blocking: {e}")
+
+            else:
+                # User joined the group - unblock bonus personalities
+                await self.db.unblock_group_bonus_personalities(user_id)
+                logger.info(f"Unblocked bonus personalities for user {user_id}")
+
+                # Notify user
+                try:
+                    await bot.send_message(
+                        chat_id=user_id,
+                        text=(
+                            "🎉 Добро пожаловать в группу проекта!\n\n"
+                            "Теперь ты можешь создать 1 бонусную кастомную личность.\n"
+                            "Используй команду /lichnost для создания."
+                        )
+                    )
+                except TelegramError as e:
+                    logger.warning(f"Could not notify user {user_id} about unblocking: {e}")
+
+        except Exception as e:
+            logger.error(f"Error handling group membership change for {user_id}: {e}")
+
     # ================================================
     # ADMIN OPERATIONS
     # ================================================

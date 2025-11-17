@@ -92,7 +92,9 @@ try:
         premium_command,
         mystatus_command,
         grantpro_command,
-        handle_start_menu_callback
+        handle_start_menu_callback,
+        handle_pre_checkout_query,
+        handle_successful_payment
     )
     from modules.summaries import (
         summary_command,
@@ -480,6 +482,19 @@ def create_bot_application():
     app.add_handler(ChatMemberHandler(
         handle_chat_member_update,
         ChatMemberHandler.CHAT_MEMBER
+    ))
+
+    # ================================================
+    # TELEGRAM STARS PAYMENT HANDLERS
+    # ================================================
+    # Handle pre-checkout query (before payment is processed)
+    from telegram.ext import PreCheckoutQueryHandler
+    app.add_handler(PreCheckoutQueryHandler(handle_pre_checkout_query))
+
+    # Handle successful payment (after payment is processed)
+    app.add_handler(MessageHandler(
+        filters.SUCCESSFUL_PAYMENT,
+        handle_successful_payment
     ))
 
     verbose_log("✅ CHECKPOINT 8: Created new bot Application with all handlers")

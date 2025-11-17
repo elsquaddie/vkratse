@@ -36,16 +36,17 @@ async def personality_command(update: Update, context: ContextTypes.DEFAULT_TYPE
     user = update.effective_user
     db = DBService()
 
-    # Get current personality
+    # Get current personality for display only (no checkmark in menu)
     current_personality_name = db.get_user_personality(user.id)
     current_display = get_current_personality_display(user.id)
 
     # Build menu using universal function (management context)
+    # NOTE: current_personality=None to avoid checkmark (по философии: нет дефолтной личности)
     reply_markup = build_personality_menu(
         user_id=user.id,
         callback_prefix="pers:select",
         context="manage",
-        current_personality=current_personality_name,
+        current_personality=None,  # No checkmark - user always makes conscious choice
         show_create_button=True
     )
 

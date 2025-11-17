@@ -77,9 +77,9 @@ async def receive_dispute_description(update: Update, context: ContextTypes.DEFA
         )
         return AWAITING_DISPUTE_DESCRIPTION
 
-    if len(dispute_text) > 500:
+    if len(dispute_text) > config.MAX_PERSONALITY_DESCRIPTION_LENGTH:
         await update.message.reply_text(
-            "⚠️ Описание слишком длинное (максимум 500 символов).\n\n"
+            f"⚠️ Описание слишком длинное (максимум {config.MAX_PERSONALITY_DESCRIPTION_LENGTH} символов).\n\n"
             "Сократи описание или /cancel для отмены."
         )
         return AWAITING_DISPUTE_DESCRIPTION

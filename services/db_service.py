@@ -167,9 +167,23 @@ class DBService:
         display_name: str,
         system_prompt: str,
         created_by_user_id: int,
-        emoji: str = '🎭'
+        emoji: str = '🎭',
+        is_group_bonus: bool = False
     ) -> Optional[int]:
-        """Create a custom personality"""
+        """
+        Create a custom personality
+
+        Args:
+            name: Internal name (lowercase)
+            display_name: Display name
+            system_prompt: AI personality prompt
+            created_by_user_id: Creator's Telegram user ID
+            emoji: Personality emoji
+            is_group_bonus: Whether this is a group membership bonus personality
+
+        Returns:
+            Personality ID if successful, None otherwise
+        """
         try:
             response = self.client.table('personalities').insert({
                 'name': name,
@@ -178,11 +192,13 @@ class DBService:
                 'emoji': emoji,
                 'is_custom': True,
                 'created_by_user_id': created_by_user_id,
-                'is_active': True
+                'is_active': True,
+                'is_group_bonus': is_group_bonus
             }).execute()
 
             if response.data:
                 personality_id = response.data[0]['id']
+                logger.info(f"Created personality '{name}' (ID: {personality_id}, group_bonus: {is_group_bonus})")
                 return personality_id
             return None
         except Exception as e:

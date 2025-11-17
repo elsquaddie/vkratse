@@ -9,6 +9,7 @@ from telegram.constants import ParseMode
 import config
 from config import logger
 from services import DBService
+from services.subscription import get_subscription_service
 from utils import (
     sanitize_personality_prompt,
     extract_user_description,
@@ -106,6 +107,40 @@ async def personality_callback(update: Update, context: ContextTypes.DEFAULT_TYP
 
     # Handle create start
     elif action == "create_start":
+        # ВАЖНО: Проверить лимит кастомных личностей
+        subscription_service = get_subscription_service()
+        check = await subscription_service.can_create_custom_personality(user.id, context.bot)
+
+        if not check['can_create']:
+            # Сформировать сообщение в зависимости от причины
+            if check['reason'] == 'need_group_or_pro':
+                message = (
+                    f"⚠️ Лимит кастомных личностей: {check['current']}/{check['limit']}\n\n"
+                    f"Чтобы создать свою личность:\n"
+                    f"• Вступи в группу проекта для получения 1 бонусного слота\n"
+                    f"или\n"
+                    f"• Обновись до Pro: /premium (3 слота)"
+                )
+            elif check['reason'] == 'need_pro':
+                message = (
+                    f"⚠️ Лимит кастомных личностей: {check['current']}/{check['limit']}\n\n"
+                    f"Обновись до Pro для создания еще 3 личностей: /premium"
+                )
+            elif check['reason'] == 'need_group':
+                message = (
+                    f"⚠️ Лимит кастомных личностей: {check['current']}/{check['limit']}\n\n"
+                    f"Вступи в группу проекта для получения +1 слота!"
+                )
+            else:  # max_reached
+                message = (
+                    f"⚠️ Достигнут максимум: {check['current']}/{check['limit']}\n\n"
+                    f"Удали неиспользуемые личности через /lichnost"
+                )
+
+            await query.message.edit_text(message)
+            return ConversationHandler.END
+
+        # Лимит не достигнут - продолжить создание
         await query.message.reply_text(
             "🎭 Создание своей личности\n\n"
             "Шаг 1 из 2\n\n"
@@ -219,15 +254,8 @@ async def receive_personality_name(update: Update, context: ContextTypes.DEFAULT
         )
         return AWAITING_NAME
 
-    # Check if user has reached the limit of custom personalities
-    current_count = db.count_user_custom_personalities(user.id)
-    if current_count >= config.MAX_CUSTOM_PERSONALITIES_PER_USER:
-        await update.message.reply_text(
-            f"❌ Достигнут лимит кастомных личностей ({config.MAX_CUSTOM_PERSONALITIES_PER_USER}).\n\n"
-            f"Удали одну из существующих личностей через /{config.COMMAND_PERSONALITY}, "
-            f"чтобы создать новую."
-        )
-        return ConversationHandler.END
+    # ПРИМЕЧАНИЕ: Проверка лимитов теперь происходит в начале создания (create_start)
+    # Здесь не проверяем повторно
 
     # Save name in context
     context.user_data['personality_name'] = name
@@ -311,6 +339,11 @@ async def receive_personality_description(update: Update, context: ContextTypes.
         )
         return AWAITING_DESCRIPTION
 
+    # Определить: это бонусная личность или нет
+    subscription_service = get_subscription_service()
+    tier = await subscription_service.get_user_tier(user.id)
+    is_group_bonus = (tier == 'free')  # Для Free-пользователя это бонус за группу
+
     # Create personality
     db = DBService()
     personality_id = db.create_personality(
@@ -318,7 +351,8 @@ async def receive_personality_description(update: Update, context: ContextTypes.
         display_name=name.capitalize(),
         system_prompt=safe_prompt,
         created_by_user_id=user.id,
-        emoji=emoji
+        emoji=emoji,
+        is_group_bonus=is_group_bonus
     )
 
     if not personality_id:

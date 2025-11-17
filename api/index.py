@@ -46,6 +46,7 @@ try:
         MessageHandler,
         CallbackQueryHandler,
         ConversationHandler,
+        ChatMemberHandler,
         filters
     )
     from telegram.constants import ChatType
@@ -247,6 +248,53 @@ if bot_initialized:
             logger.info(f"Deleted all data for chat {chat.id}")
 
 
+    async def handle_chat_member_update(update: Update, context) -> None:
+        """
+        Handle user joining or leaving a chat
+        Used to track membership in the project group for bonus features
+        """
+        try:
+            # Get chat member update
+            chat_member_update = update.chat_member
+
+            if not chat_member_update:
+                return
+
+            # Check if this is the project group
+            if not config.PROJECT_TELEGRAM_GROUP_ID:
+                return
+
+            if chat_member_update.chat.id != config.PROJECT_TELEGRAM_GROUP_ID:
+                return
+
+            # Get user and status changes
+            user_id = chat_member_update.new_chat_member.user.id
+            old_status = chat_member_update.old_chat_member.status
+            new_status = chat_member_update.new_chat_member.status
+
+            # Determine if user joined or left
+            was_member = old_status in ['member', 'administrator', 'creator']
+            is_member = new_status in ['member', 'administrator', 'creator']
+
+            # Only process if membership changed
+            if was_member != is_member:
+                logger.info(f"Group membership changed for user {user_id}: was_member={was_member}, is_member={is_member}")
+
+                # Initialize subscription service
+                from services.subscription import get_subscription_service
+                subscription_service = get_subscription_service()
+
+                # Handle membership change
+                await subscription_service.handle_group_membership_change(
+                    user_id=user_id,
+                    is_member=is_member,
+                    bot=context.bot
+                )
+
+        except Exception as e:
+            logger.error(f"Error handling chat member update: {e}")
+
+
 # ================================================
 # CHECKPOINT 8: Create bot application function
 # ================================================
@@ -425,6 +473,12 @@ def create_bot_application():
     app.add_handler(MessageHandler(
         filters.StatusUpdate.LEFT_CHAT_MEMBER,
         handle_bot_removed_from_chat
+    ))
+
+    # Handle chat member updates (for group membership tracking)
+    app.add_handler(ChatMemberHandler(
+        handle_chat_member_update,
+        ChatMemberHandler.CHAT_MEMBER
     ))
 
     verbose_log("✅ CHECKPOINT 8: Created new bot Application with all handlers")

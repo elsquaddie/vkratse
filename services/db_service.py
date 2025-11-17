@@ -1101,3 +1101,55 @@ class DBService:
         except Exception as e:
             logger.error(f"Error blocking excess personalities for {user_id}: {e}")
             return False
+
+    async def block_group_bonus_personalities(self, user_id: int) -> bool:
+        """
+        Block (soft-block) group bonus personalities when user leaves the group
+
+        Args:
+            user_id: Telegram user ID
+
+        Returns:
+            True if successful
+        """
+        try:
+            # Set is_blocked = True for all group bonus personalities
+            self.client.table('personalities')\
+                .update({'is_blocked': True})\
+                .eq('created_by_user_id', user_id)\
+                .eq('is_group_bonus', True)\
+                .eq('is_active', True)\
+                .execute()
+
+            logger.info(f"Blocked group bonus personalities for user {user_id}")
+            return True
+
+        except Exception as e:
+            logger.error(f"Error blocking group bonus personalities for {user_id}: {e}")
+            return False
+
+    async def unblock_group_bonus_personalities(self, user_id: int) -> bool:
+        """
+        Unblock group bonus personalities when user joins the group
+
+        Args:
+            user_id: Telegram user ID
+
+        Returns:
+            True if successful
+        """
+        try:
+            # Set is_blocked = False for all group bonus personalities
+            self.client.table('personalities')\
+                .update({'is_blocked': False})\
+                .eq('created_by_user_id', user_id)\
+                .eq('is_group_bonus', True)\
+                .eq('is_active', True)\
+                .execute()
+
+            logger.info(f"Unblocked group bonus personalities for user {user_id}")
+            return True
+
+        except Exception as e:
+            logger.error(f"Error unblocking group bonus personalities for {user_id}: {e}")
+            return False

@@ -106,6 +106,11 @@ ADMIN_USER_ID = int(os.getenv('ADMIN_USER_ID', '0'))  # Admin Telegram ID for ma
 YOOKASSA_SHOP_ID = os.getenv('YOOKASSA_SHOP_ID', '')
 YOOKASSA_SECRET_KEY = os.getenv('YOOKASSA_SECRET_KEY', '')
 
+# Payment DRY RUN mode (for testing payments without real money)
+# When enabled, all payment flows will automatically succeed and grant subscription
+# Set to 'true' to enable testing mode, 'false' for production
+PAYMENT_DRY_RUN = os.getenv('PAYMENT_DRY_RUN', 'false').lower() == 'true'
+
 # ================================================
 # COMMAND NAMES (Latin characters - Telegram API requirement)
 # ================================================

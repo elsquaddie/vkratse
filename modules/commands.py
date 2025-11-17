@@ -348,10 +348,34 @@ async def handle_start_menu_callback(update: Update, context: ContextTypes.DEFAU
         elif action == "buy_pro_card":
             # Create payment link via YooKassa
             from services.payments import create_payment_link, PaymentError, get_pricing_info
+            from services import db_service
 
             user_id = query.from_user.id
 
             try:
+                # DRY RUN MODE: Simulate successful payment
+                if config.PAYMENT_DRY_RUN:
+                    await query.edit_message_text("🧪 DRY RUN: Эмуляция оплаты...")
+
+                    # Grant subscription
+                    await db_service.create_or_update_subscription(
+                        user_id=user_id,
+                        tier='pro',
+                        payment_method='card_dryrun',
+                        duration_days=30
+                    )
+
+                    # Show success message
+                    message = "✅ Подписка активирована! (DRY RUN)\n\n"
+                    message += "🎉 Теперь у тебя Pro подписка на 30 дней!\n\n"
+                    message += "⚠️ Это тестовая активация.\n"
+                    message += "Для реальных платежей отключи PAYMENT_DRY_RUN в настройках."
+
+                    keyboard = [[InlineKeyboardButton("« Назад", callback_data=sign_callback_data("show_premium"))]]
+                    reply_markup = InlineKeyboardMarkup(keyboard)
+                    await query.edit_message_text(message, reply_markup=reply_markup)
+                    return
+
                 # Show loading message
                 await query.edit_message_text("⏳ Создаю платежную ссылку...")
 
@@ -421,10 +445,34 @@ async def handle_start_menu_callback(update: Update, context: ContextTypes.DEFAU
         elif action == "buy_pro_stars":
             # Create invoice for Telegram Stars payment
             from services.payments import create_stars_invoice, PaymentError, get_stars_pricing_info
+            from services import db_service
 
             user_id = query.from_user.id
 
             try:
+                # DRY RUN MODE: Simulate successful payment
+                if config.PAYMENT_DRY_RUN:
+                    await query.edit_message_text("🧪 DRY RUN: Эмуляция оплаты...")
+
+                    # Grant subscription
+                    await db_service.create_or_update_subscription(
+                        user_id=user_id,
+                        tier='pro',
+                        payment_method='stars_dryrun',
+                        duration_days=30
+                    )
+
+                    # Show success message
+                    message = "✅ Подписка активирована! (DRY RUN)\n\n"
+                    message += "🎉 Теперь у тебя Pro подписка на 30 дней!\n\n"
+                    message += "⚠️ Это тестовая активация.\n"
+                    message += "Для реальных платежей отключи PAYMENT_DRY_RUN в настройках."
+
+                    keyboard = [[InlineKeyboardButton("« Назад", callback_data=sign_callback_data("show_premium"))]]
+                    reply_markup = InlineKeyboardMarkup(keyboard)
+                    await query.edit_message_text(message, reply_markup=reply_markup)
+                    return
+
                 # Show loading message
                 await query.edit_message_text("⏳ Создаю счёт для оплаты...")
 

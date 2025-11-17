@@ -116,7 +116,7 @@ async def receive_dispute_description(update: Update, context: ContextTypes.DEFA
         context="select",
         current_personality=None,  # No default selection - user must choose
         extra_callback_data={"chat_id": chat_id},
-        show_create_button=False,  # Don't show create button in judge context
+        show_create_button=True,  # Allow creating custom personality during judge
         show_back_button=True,  # Show back button to cancel judge
         back_callback="judge_cancel"
     )

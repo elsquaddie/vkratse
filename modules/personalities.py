@@ -83,6 +83,16 @@ async def personality_callback(update: Update, context: ContextTypes.DEFAULT_TYP
 
     action = parts[1]
 
+    # Handle blocked personality
+    if action == "blocked":
+        await query.answer(
+            "⚠️ Эта личность заблокирована.\n\n"
+            "Причина: ты вышел из группы проекта.\n"
+            "Вернись в группу, чтобы разблокировать её!",
+            show_alert=True
+        )
+        return ConversationHandler.END
+
     # Handle selection
     if action == "select":
         if len(parts) < 3:
@@ -90,18 +100,30 @@ async def personality_callback(update: Update, context: ContextTypes.DEFAULT_TYP
 
         personality_name = parts[2]
 
+        # Get personality and check if it's blocked
+        personality = db.get_personality(personality_name)
+        if not personality:
+            await query.message.edit_text("❌ Личность не найдена")
+            return ConversationHandler.END
+
+        # Check if personality is blocked
+        if personality.is_blocked:
+            await query.answer(
+                "⚠️ Эта личность заблокирована.\n\n"
+                "Причина: ты вышел из группы проекта.\n"
+                "Вернись в группу, чтобы разблокировать её!",
+                show_alert=True
+            )
+            return ConversationHandler.END
+
         # Update user settings
         db.update_user_personality(user.id, personality_name, user.username)
 
-        personality = db.get_personality(personality_name)
-        if personality:
-            await query.message.edit_text(
-                f"✅ Личность изменена на: {personality}\n\n"
-                f"Теперь /{config.COMMAND_SUMMARY} и /{config.COMMAND_JUDGE} "
-                f"будут отвечать в этом стиле."
-            )
-        else:
-            await query.message.edit_text("❌ Личность не найдена")
+        await query.message.edit_text(
+            f"✅ Личность изменена на: {personality}\n\n"
+            f"Теперь /{config.COMMAND_SUMMARY} и /{config.COMMAND_JUDGE} "
+            f"будут отвечать в этом стиле."
+        )
 
         return ConversationHandler.END
 

@@ -225,6 +225,16 @@ async def handle_judge_personality_callback(update: Update, context: ContextType
             await query.edit_message_text("❌ Личность не найдена")
             return
 
+        # Check if personality is blocked
+        if personality.is_blocked:
+            await query.answer(
+                "⚠️ Эта личность заблокирована.\n\n"
+                "Причина: ты вышел из группы проекта.\n"
+                "Вернись в группу, чтобы разблокировать её!",
+                show_alert=True
+            )
+            return
+
         # ================================================
         # MONETIZATION: Check personality usage limit for judge
         # ================================================

@@ -77,16 +77,22 @@ def build_personality_menu(
     # 3. Build keyboard for base personalities (2 columns)
     row = []
     for p in base_personalities:
-        button_text = f"{p.emoji} {p.display_name}"
-        if current_personality and p.name == current_personality:
-            button_text += " ✓"
+        # Check if personality is blocked
+        if p.is_blocked:
+            button_text = f"🔒 {p.emoji} {p.display_name}"
+            # Make it non-clickable by using a special callback
+            callback_data = "pers:blocked"
+        else:
+            button_text = f"{p.emoji} {p.display_name}"
+            if current_personality and p.name == current_personality:
+                button_text += " ✓"
 
-        callback_data = _build_callback_data(
-            callback_prefix,
-            p,
-            user_id,
-            extra_callback_data
-        )
+            callback_data = _build_callback_data(
+                callback_prefix,
+                p,
+                user_id,
+                extra_callback_data
+            )
 
         row.append(InlineKeyboardButton(button_text, callback_data=callback_data))
 
@@ -107,25 +113,37 @@ def build_personality_menu(
         )])
 
         for p in custom_personalities:
-            button_text = f"🎨 {p.display_name}"
-            if current_personality and p.name == current_personality:
-                button_text += " ✓"
+            # Check if personality is blocked
+            if p.is_blocked:
+                button_text = f"🔒 {p.display_name}"
+                # Make it non-clickable by using a special callback
+                callback_data = "pers:blocked"
+            else:
+                button_text = f"🎨 {p.display_name}"
+                if current_personality and p.name == current_personality:
+                    button_text += " ✓"
 
-            callback_data = _build_callback_data(
-                callback_prefix,
-                p,
-                user_id,
-                extra_callback_data
-            )
+                callback_data = _build_callback_data(
+                    callback_prefix,
+                    p,
+                    user_id,
+                    extra_callback_data
+                )
 
             # Build row based on context
             if context == "manage":
                 # Management context: [Select] [✏️] [🗑️]
-                keyboard.append([
-                    InlineKeyboardButton(button_text, callback_data=callback_data),
-                    InlineKeyboardButton("✏️", callback_data=f"pers:edit:{p.name}"),
-                    InlineKeyboardButton("🗑️", callback_data=f"pers:delete:{p.name}")
-                ])
+                # If blocked, disable edit/delete buttons
+                if p.is_blocked:
+                    keyboard.append([
+                        InlineKeyboardButton(button_text, callback_data=callback_data)
+                    ])
+                else:
+                    keyboard.append([
+                        InlineKeyboardButton(button_text, callback_data=callback_data),
+                        InlineKeyboardButton("✏️", callback_data=f"pers:edit:{p.name}"),
+                        InlineKeyboardButton("🗑️", callback_data=f"pers:delete:{p.name}")
+                    ])
             else:
                 # Selection context: [Select only]
                 keyboard.append([

@@ -88,6 +88,8 @@ try:
         start_command,
         help_command,
         stats_command,
+        premium_command,
+        mystatus_command,
         handle_start_menu_callback
     )
     from modules.summaries import (
@@ -269,6 +271,8 @@ def create_bot_application():
     app.add_handler(CommandHandler("start", start_command))
     app.add_handler(CommandHandler(config.COMMAND_HELP, help_command))
     app.add_handler(CommandHandler("stats", stats_command))
+    app.add_handler(CommandHandler("premium", premium_command))
+    app.add_handler(CommandHandler("mystatus", mystatus_command))
 
     # Summary command
     app.add_handler(CommandHandler(config.COMMAND_SUMMARY, summary_command))

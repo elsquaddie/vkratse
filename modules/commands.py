@@ -32,10 +32,11 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
     # Different buttons for private vs group chats
     if chat_type == ChatType.PRIVATE:
-        # Private chat: 4 buttons
+        # Private chat: 5 buttons (added Premium)
         keyboard = [
             [InlineKeyboardButton("💬 Общаться напрямую", callback_data=sign_callback_data("direct_chat"))],
             [InlineKeyboardButton("📊 Саммари групп", callback_data=sign_callback_data("dm_summary"))],
+            [InlineKeyboardButton("💎 Premium", callback_data=sign_callback_data("show_premium"))],
             [InlineKeyboardButton("👥 Добавить в групповой чат", url=f"https://t.me/{config.BOT_USERNAME}?startgroup=true")],
             [InlineKeyboardButton("🎭 Настроить личность", callback_data=sign_callback_data("setup_personality"))]
         ]
@@ -77,10 +78,11 @@ async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, edi
 
     # Different buttons for private vs group chats
     if chat_type == ChatType.PRIVATE:
-        # Private chat: 4 buttons
+        # Private chat: 5 buttons (added Premium)
         keyboard = [
             [InlineKeyboardButton("💬 Общаться напрямую", callback_data=sign_callback_data("direct_chat"))],
             [InlineKeyboardButton("📊 Саммари групп", callback_data=sign_callback_data("dm_summary"))],
+            [InlineKeyboardButton("💎 Premium", callback_data=sign_callback_data("show_premium"))],
             [InlineKeyboardButton("👥 Добавить в групповой чат", url=f"https://t.me/{config.BOT_USERNAME}?startgroup=true")],
             [InlineKeyboardButton("🎭 Настроить личность", callback_data=sign_callback_data("setup_personality"))]
         ]
@@ -242,6 +244,83 @@ async def handle_start_menu_callback(update: Update, context: ContextTypes.DEFAU
             reply_markup = InlineKeyboardMarkup(keyboard)
             await query.edit_message_text(text, reply_markup=reply_markup)
 
+        elif action == "show_premium":
+            # Show premium tiers (same logic as /premium command)
+            from services import DBService, SubscriptionService
+
+            user_id = query.from_user.id
+
+            # Get user's current tier
+            db = DBService()
+            sub_service = SubscriptionService(db)
+            current_tier = await sub_service.get_user_tier(user_id)
+
+            # Build message
+            message = "💎 Premium планы\n\n"
+
+            # Free tier
+            if current_tier == 'free':
+                message += "🆓 FREE (текущий план)\n"
+            else:
+                message += "🆓 FREE\n"
+            message += "• 30 сообщений/день\n"
+            message += "• 3 саммари в ЛС/день\n"
+            message += "• 3 саммари в группах/день\n"
+            message += "• 5 использований личности/день\n"
+            message += "• 0 кастомных личностей\n\n"
+
+            # Pro tier
+            if current_tier == 'pro':
+                message += "⭐ PRO (текущий план)\n"
+            else:
+                message += "⭐ PRO - $2.99/мес\n"
+            message += "• 500 сообщений/день\n"
+            message += "• 10 саммари в ЛС/день\n"
+            message += "• 20 саммари в группах/день\n"
+            message += "• Безлимитные личности ♾️\n"
+            message += "• 3 кастомные личности\n"
+            message += "• Приоритетная обработка\n\n"
+
+            # Group bonus info
+            message += "🎁 Бонус за группу:\n"
+            message += "Вступи в нашу группу и получи +1 кастомную личность!\n\n"
+
+            # Buttons
+            keyboard = []
+
+            if current_tier != 'pro':
+                # Show buy button only for non-Pro users
+                keyboard.append([InlineKeyboardButton("💳 Купить Pro", callback_data=sign_callback_data("buy_pro"))])
+
+            # Tribute donation link
+            if config.TRIBUTE_URL and config.TRIBUTE_URL != 'https://tribute.to/your_bot_page':
+                keyboard.append([InlineKeyboardButton("🎁 Поддержать (Tribute.to)", url=config.TRIBUTE_URL)])
+
+            # Back button
+            keyboard.append([InlineKeyboardButton("« Назад", callback_data=sign_callback_data("back_to_main"))])
+
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_text(message, reply_markup=reply_markup)
+
+        elif action == "buy_pro":
+            # Show instructions for buying Pro
+            message = "💳 Купить Pro подписку\n\n"
+            message += "Для покупки Pro-подписки:\n\n"
+            message += "1️⃣ Сделай донат через Tribute.to\n"
+            message += "2️⃣ Напиши админу с подтверждением оплаты\n"
+            message += "3️⃣ Получи доступ к Pro функциям!\n\n"
+            message += "💵 Цена: $2.99/месяц\n"
+            message += "⏰ Срок: 30 дней\n\n"
+            message += "После оплаты твоя подписка будет активирована вручную в течение 24 часов."
+
+            keyboard = []
+            if config.TRIBUTE_URL and config.TRIBUTE_URL != 'https://tribute.to/your_bot_page':
+                keyboard.append([InlineKeyboardButton("🎁 Оплатить через Tribute", url=config.TRIBUTE_URL)])
+            keyboard.append([InlineKeyboardButton("« Назад", callback_data=sign_callback_data("show_premium"))])
+
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_text(message, reply_markup=reply_markup)
+
         else:
             await query.edit_message_text("❌ Неизвестное действие. Попробуй /start")
 
@@ -271,6 +350,10 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 ⚖️ **Судейство:**
 /{config.COMMAND_JUDGE} — рассудить спор
+
+💎 **Premium:**
+/premium — узнать о Pro-подписке
+/mystatus — проверить свой статус и использование
 
 📊 **Статистика:**
 /stats — твоя статистика использования
@@ -311,3 +394,139 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 Продолжай пользоваться ботом! 🚀"""
 
     await update.message.reply_text(stats_text)
+
+
+async def premium_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Handle /premium command
+    Show available subscription tiers and pricing
+    """
+    from services import DBService, SubscriptionService
+
+    user_id = update.effective_user.id
+
+    # Get user's current tier
+    db = DBService()
+    sub_service = SubscriptionService(db)
+    current_tier = await sub_service.get_user_tier(user_id)
+
+    # Build message
+    message = "💎 Premium планы\n\n"
+
+    # Free tier
+    if current_tier == 'free':
+        message += "🆓 FREE (текущий план)\n"
+    else:
+        message += "🆓 FREE\n"
+    message += "• 30 сообщений/день\n"
+    message += "• 3 саммари в ЛС/день\n"
+    message += "• 3 саммари в группах/день\n"
+    message += "• 5 использований личности/день\n"
+    message += "• 0 кастомных личностей\n\n"
+
+    # Pro tier
+    if current_tier == 'pro':
+        message += "⭐ PRO (текущий план)\n"
+    else:
+        message += "⭐ PRO - $2.99/мес\n"
+    message += "• 500 сообщений/день\n"
+    message += "• 10 саммари в ЛС/день\n"
+    message += "• 20 саммари в группах/день\n"
+    message += "• Безлимитные личности ♾️\n"
+    message += "• 3 кастомные личности\n"
+    message += "• Приоритетная обработка\n\n"
+
+    # Group bonus info
+    message += "🎁 Бонус за группу:\n"
+    message += "Вступи в нашу группу и получи +1 кастомную личность!\n\n"
+
+    # Buttons
+    keyboard = []
+
+    if current_tier != 'pro':
+        # Show buy button only for non-Pro users
+        keyboard.append([InlineKeyboardButton("💳 Купить Pro", callback_data=sign_callback_data("buy_pro"))])
+
+    # Tribute donation link
+    if config.TRIBUTE_URL and config.TRIBUTE_URL != 'https://tribute.to/your_bot_page':
+        keyboard.append([InlineKeyboardButton("🎁 Поддержать (Tribute.to)", url=config.TRIBUTE_URL)])
+
+    # Back button
+    keyboard.append([InlineKeyboardButton("« Назад", callback_data=sign_callback_data("back_to_main"))])
+
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text(message, reply_markup=reply_markup)
+
+
+async def mystatus_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Handle /mystatus command
+    Show current subscription status and usage statistics
+    """
+    from services import DBService, SubscriptionService
+    from datetime import datetime, date, timezone
+
+    user_id = update.effective_user.id
+
+    # Get services
+    db = DBService()
+    sub_service = SubscriptionService(db)
+
+    # Get tier and usage
+    tier = await sub_service.get_user_tier(user_id)
+    usage = await db.get_usage_limits(user_id, date.today())
+
+    # Emoji and name for tier
+    tier_emoji = "💎" if tier == 'pro' else "🆓"
+    tier_name = "Pro" if tier == 'pro' else "Free"
+
+    message = f"📊 Твой статус\n\n"
+    message += f"Тариф: {tier_emoji} {tier_name}\n"
+
+    # If Pro - show expiration date
+    if tier == 'pro':
+        subscription = await db.get_subscription(user_id)
+        if subscription and subscription.get('expires_at'):
+            expires_at_str = subscription.get('expires_at')
+
+            # Parse ISO string to datetime
+            if isinstance(expires_at_str, str):
+                expires_at = datetime.fromisoformat(expires_at_str.replace('Z', '+00:00'))
+            else:
+                expires_at = expires_at_str
+
+            # Calculate days left
+            days_left = (expires_at - datetime.now(expires_at.tzinfo or timezone.utc)).days
+
+            message += f"Активен до: {expires_at.strftime('%Y-%m-%d')}\n"
+            message += f"Осталось: {days_left} дней\n"
+
+    message += "\n"
+
+    # Get limits for user's tier
+    limits = config.TIER_LIMITS[tier]
+
+    # Usage today
+    message += "Использовано сегодня:\n"
+
+    messages_count = usage.get('messages_count', 0) if usage else 0
+    summaries_dm_count = usage.get('summaries_dm_count', 0) if usage else 0
+    summaries_group_count = usage.get('summaries_count', 0) if usage else 0
+    judge_count = usage.get('judge_count', 0) if usage else 0
+
+    message += f"💬 Сообщения: {messages_count}/{limits['messages_dm']}\n"
+    message += f"📝 Саммари (ЛС): {summaries_dm_count}/{limits['summaries_dm']}\n"
+    message += f"📊 Саммари (группы): {summaries_group_count}/{limits['summaries_group']}\n"
+    message += f"⚖️ Судейство: {judge_count}/{limits['judge']}\n"
+
+    # Personality info
+    if tier == 'pro':
+        message += "\n✨ Личности: Безлимитно ♾️\n"
+    else:
+        message += "\n🎭 Личности: 5 использований/день (кроме Нейтральной)\n"
+
+    # Call to action for Free users
+    if tier == 'free':
+        message += "\n💡 Обновись до Pro: /premium"
+
+    await update.message.reply_text(message)

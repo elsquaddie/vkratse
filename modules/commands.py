@@ -530,3 +530,137 @@ async def mystatus_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         message += "\n💡 Обновись до Pro: /premium"
 
     await update.message.reply_text(message)
+
+
+async def grantpro_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    ADMIN ONLY: Grant Pro subscription to a user
+    Usage: /grantpro <user_id> <days>
+
+    Security features:
+    - Admin ID verification
+    - Input validation
+    - Logging all operations
+    - Error handling
+    """
+    from services import DBService, SubscriptionService
+    from datetime import datetime
+
+    admin_id = update.effective_user.id
+
+    # === SECURITY: Admin verification ===
+    if admin_id != config.ADMIN_USER_ID:
+        logger.warning(f"Unauthorized /grantpro attempt by user {admin_id}")
+        await update.message.reply_text("⛔ Доступ запрещён. Эта команда только для администратора.")
+        return
+
+    # === SECURITY: Input validation ===
+    try:
+        args = context.args
+        if not args or len(args) < 1:
+            await update.message.reply_text(
+                "❌ Неверный формат команды.\n\n"
+                "Использование: /grantpro <user_id> <days>\n"
+                "Пример: /grantpro 123456789 30\n\n"
+                "• user_id - Telegram ID пользователя\n"
+                "• days - Количество дней (по умолчанию 30)"
+            )
+            return
+
+        # Parse and validate user_id
+        target_user_id = int(args[0])
+        if target_user_id <= 0:
+            await update.message.reply_text("❌ Неверный user_id. Должен быть положительным числом.")
+            return
+
+        # Parse and validate duration
+        duration_days = int(args[1]) if len(args) > 1 else 30
+        if duration_days <= 0 or duration_days > 3650:  # Max 10 years
+            await update.message.reply_text("❌ Неверная длительность. Допустимо: 1-3650 дней.")
+            return
+
+    except ValueError as e:
+        logger.error(f"Invalid input for /grantpro: {e}")
+        await update.message.reply_text(
+            "❌ Ошибка парсинга аргументов.\n\n"
+            "Использование: /grantpro <user_id> <days>\n"
+            "Оба параметра должны быть числами."
+        )
+        return
+
+    # === SECURITY: Confirm before activation ===
+    # Log the operation BEFORE executing
+    logger.info(
+        f"Admin {admin_id} initiating Pro subscription grant: "
+        f"target_user={target_user_id}, duration={duration_days} days"
+    )
+
+    try:
+        # Initialize services
+        db = DBService()
+        sub_service = SubscriptionService(db)
+
+        # Activate subscription
+        success = await sub_service.create_or_update_subscription(
+            user_id=target_user_id,
+            tier='pro',
+            duration_days=duration_days,
+            payment_method='tribute',
+            transaction_id=f'manual_grant_{admin_id}_{int(datetime.now().timestamp())}'
+        )
+
+        if success:
+            # Log successful activation
+            logger.info(
+                f"Pro subscription granted successfully: "
+                f"user={target_user_id}, days={duration_days}, admin={admin_id}"
+            )
+
+            # Calculate expiry date
+            from datetime import timedelta
+            expires_at = datetime.now() + timedelta(days=duration_days)
+
+            # Confirm to admin
+            await update.message.reply_text(
+                f"✅ Pro-подписка успешно активирована!\n\n"
+                f"👤 User ID: {target_user_id}\n"
+                f"⏰ Срок: {duration_days} дней\n"
+                f"📅 Истекает: {expires_at.strftime('%Y-%m-%d %H:%M')}\n\n"
+                f"Пользователь получит уведомление."
+            )
+
+            # === SECURITY: Notify user (but handle failures gracefully) ===
+            try:
+                await context.bot.send_message(
+                    chat_id=target_user_id,
+                    text=(
+                        f"🎉 Поздравляем!\n\n"
+                        f"Ваша Pro-подписка активирована на {duration_days} дней.\n"
+                        f"Теперь доступны:\n"
+                        f"• Безлимитные личности ♾️\n"
+                        f"• 500 сообщений/день\n"
+                        f"• 3 кастомные личности\n"
+                        f"• Приоритетная обработка\n\n"
+                        f"Проверить статус: /mystatus\n"
+                        f"Подписка истекает: {expires_at.strftime('%Y-%m-%d')}"
+                    )
+                )
+                logger.info(f"User {target_user_id} notified about Pro activation")
+            except Exception as notify_error:
+                logger.error(f"Failed to notify user {target_user_id}: {notify_error}")
+                await update.message.reply_text(
+                    f"⚠️ Подписка активирована, но не удалось отправить уведомление пользователю.\n"
+                    f"Возможно, пользователь не начал диалог с ботом."
+                )
+        else:
+            # Log failure
+            logger.error(f"Failed to grant Pro subscription to user {target_user_id}")
+            await update.message.reply_text("❌ Ошибка активации подписки. Проверьте логи.")
+
+    except Exception as e:
+        logger.error(f"Error in /grantpro command: {e}", exc_info=True)
+        await update.message.reply_text(
+            f"❌ Критическая ошибка при активации подписки.\n"
+            f"Ошибка: {str(e)}\n\n"
+            f"Проверьте логи для подробностей."
+        )

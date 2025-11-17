@@ -1,8 +1,9 @@
 # 💰 TODO: Монетизация v2.1
 
 **Дата создания:** 2025-11-17
+**Последнее обновление:** 2025-11-17 (Шаг 5 завершен)
 **Статус:** В разработке
-**Прогресс:** 21/75 задач (28%)
+**Прогресс:** 25/75 задач (33%)
 
 **📝 Инструкции для тестирования:**
 - [QUICKSTART_MONETIZATION.md](./QUICKSTART_MONETIZATION.md) - Быстрый старт за 5 минут
@@ -369,14 +370,16 @@
 - [ ] **5.1** Создать страницу на [Tribute.to](https://tribute.to) для сбора донатов
   - Описать тарифы и бонусы
   - Указать, что после доната нужно связаться с админом
+  - **ПРИМЕЧАНИЕ:** Это ручная задача для владельца бота
 
-- [ ] **5.2** Добавить в `config.py`: `TRIBUTE_URL`
+- [x] **5.2** Добавить в `config.py`: `TRIBUTE_URL` ✅
   ```python
   TRIBUTE_URL = os.getenv('TRIBUTE_URL', 'https://tribute.to/your_bot_page')
   ADMIN_USER_ID = int(os.getenv('ADMIN_USER_ID', '0'))  # Ваш Telegram ID
   ```
+  - Реализовано в config.py:102-103
 
-- [ ] **5.3** Обновить кнопку "Купить Pro" в `/premium`
+- [x] **5.3** Обновить кнопку "Купить Pro" в `/premium` ✅
   ```python
   keyboard = [
       [InlineKeyboardButton("🎁 Donate (Tribute.to)", url=config.TRIBUTE_URL)],
@@ -384,88 +387,29 @@
   ]
   ```
 
-- [ ] **5.4** Создать админскую команду `/grantpro` в `modules/commands.py`
-  ```python
-  async def grantpro_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-      """Админская команда для ручной активации Pro"""
-      admin_id = update.effective_user.id
+- [x] **5.4** Создать админскую команду `/grantpro` в `modules/commands.py` ✅
+  - **Реализовано:** modules/commands.py:535-666
+  - **Зарегистрировано:** api/index.py:93, 277
+  - **УЛУЧШЕНИЯ БЕЗОПАСНОСТИ:**
+    - ✅ Проверка ADMIN_USER_ID (только админ может использовать)
+    - ✅ Валидация входных данных (user_id > 0, days 1-3650)
+    - ✅ Полное логирование всех операций (до, во время, после)
+    - ✅ Обработка всех ошибок с graceful degradation
+    - ✅ Уникальный transaction_id для аудита
+    - ✅ Защита от неудачных уведомлений пользователя
+    - ✅ Информативные сообщения об ошибках
 
-      # Проверка прав админа
-      if admin_id != config.ADMIN_USER_ID:
-          await update.message.reply_text("⛔ Доступ запрещен")
-          return
-
-      # Парсинг аргументов: /grantpro <user_id> <days>
-      try:
-          args = context.args
-          target_user_id = int(args[0])
-          duration_days = int(args[1]) if len(args) > 1 else 30
-      except (IndexError, ValueError):
-          await update.message.reply_text(
-              "Использование: /grantpro <user_id> <days>\n"
-              "Пример: /grantpro 123456789 30"
-          )
-          return
-
-      # Активировать подписку
-      success = await create_or_update_subscription(
-          user_id=target_user_id,
-          tier='pro',
-          duration_days=duration_days,
-          payment_method='tribute'
-      )
-
-      if success:
-          await update.message.reply_text(
-              f"✅ Pro-подписка активирована!\n"
-              f"User ID: {target_user_id}\n"
-              f"Срок: {duration_days} дней"
-          )
-
-          # Уведомить пользователя
-          try:
-              await context.bot.send_message(
-                  chat_id=target_user_id,
-                  text=f"🎉 Поздравляем!\n\n"
-                       f"Ваша Pro-подписка активирована на {duration_days} дней.\n"
-                       f"Наслаждайтесь безлимитными возможностями!\n\n"
-                       f"Проверить статус: /mystatus"
-              )
-          except Exception as e:
-              logger.error(f"Failed to notify user {target_user_id}: {e}")
-      else:
-          await update.message.reply_text("❌ Ошибка активации подписки")
+  **Использование:**
+  ```bash
+  /grantpro <user_id> <days>
+  # Примеры:
+  /grantpro 123456789 30    # 30 дней Pro
+  /grantpro 987654321 365   # 1 год Pro
   ```
 
-- [ ] **5.5** Добавить в `db_service.py`: `create_or_update_subscription()`
-  ```python
-  async def create_or_update_subscription(
-      user_id: int,
-      tier: str,
-      duration_days: int,
-      payment_method: str = 'manual',
-      transaction_id: str = None
-  ) -> bool:
-      """Создать или обновить подписку пользователя"""
-      try:
-          expires_at = datetime.now() + timedelta(days=duration_days)
-
-          # Upsert
-          self.client.table('subscriptions').upsert({
-              'user_id': user_id,
-              'tier': tier,
-              'expires_at': expires_at.isoformat(),
-              'payment_method': payment_method,
-              'transaction_id': transaction_id,
-              'is_active': True,
-              'updated_at': datetime.now().isoformat()
-          }).execute()
-
-          return True
-      except Exception as e:
-          logger.error(f"Error creating subscription: {e}")
-          return False
-  ```
+- [x] **5.5** Добавить в `db_service.py`: `create_or_update_subscription()` ✅
+  - Реализовано в services/subscription.py
+  - Используется через SubscriptionService.create_or_update_subscription()
 
 - [ ] **5.6 ТЕСТ:** Нажать на кнопку в `/premium` и проверить, что Tribute.to открывается
 
@@ -1418,11 +1362,13 @@
 ## 📊 Прогресс
 
 **Всего задач:** 75
-**Выполнено:** 21
-**Процент завершения:** 28%
+**Выполнено:** 25
+**Процент завершения:** 33%
 
-**Текущий этап:** ✅ Шаг 3 завершен - Базовые лимиты внедрены (8/10 задач, тесты пропущены)
-**Следующий шаг:** Шаг 4 - Команды /premium и /mystatus
+**Текущий этап:** ✅ Шаг 5 завершен - Интеграция с Tribute.to (5/7 задач, тесты пропущены)
+**Следующий шаг:** Шаг 6 - Логика для Pro-пользователей (безлимитные личности)
+
+**🔐 БЕЗОПАСНОСТЬ:** Команда /grantpro реализована с многоуровневой защитой (admin auth, input validation, logging, error handling)
 
 ---
 

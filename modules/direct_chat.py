@@ -116,13 +116,52 @@ async def handle_personality_selection(
 
         # Check if personality is blocked
         if personality.is_blocked:
-            await query.answer(
-                "⚠️ Эта личность заблокирована.\n\n"
-                "Причина: ты вышел из группы проекта.\n"
-                "Вернись в группу, чтобы разблокировать её!",
-                show_alert=True
+            # Check if user is actually in the group now (force check to bypass cache)
+            is_member = await subscription_service.is_in_project_group(
+                user_id=user_id,
+                bot=context.bot,
+                force_check=True
             )
-            return
+
+            if is_member:
+                # User is back in the group! Unblock all their group bonus personalities
+                logger.info(f"User {user_id} is in group, auto-unblocking personality {personality.id}")
+                await db_service.unblock_group_bonus_personalities(user_id)
+
+                # Refresh personality data to get updated is_blocked status
+                personality = db_service.get_personality_by_id(personality_id)
+                if not personality:
+                    await query.edit_message_text("❌ Ошибка при обновлении личности. Попробуй /start")
+                    return
+
+                # Continue with normal flow (personality is now unblocked)
+                logger.info(f"Personality {personality.id} unblocked, continuing with selection")
+            else:
+                # User is NOT in the group - show helpful message
+                message_text = (
+                    "🔒 Эта личность заблокирована.\n\n"
+                    "**Причина:** ты вышел из группы проекта.\n\n"
+                    "💡 **Как разблокировать:**\n"
+                    "Вернись в группу, чтобы снова использовать эту личность!"
+                )
+
+                keyboard = []
+                if config.PROJECT_GROUP_LINK:
+                    keyboard.append([InlineKeyboardButton(
+                        "🔗 Вернуться в группу",
+                        url=config.PROJECT_GROUP_LINK
+                    )])
+                keyboard.append([InlineKeyboardButton(
+                    "◀️ Назад к личностям",
+                    callback_data=sign_callback_data("setup_personality")
+                )])
+
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                await query.edit_message_text(
+                    text=message_text,
+                    reply_markup=reply_markup
+                )
+                return
 
         # Save user's personality choice
         db_service.update_user_personality(user_id, personality.name, username)
@@ -218,12 +257,55 @@ async def handle_direct_message(
 
         # Check if personality is blocked
         if personality.is_blocked:
-            await update.message.reply_text(
-                "⚠️ Выбранная личность заблокирована.\n\n"
-                "Причина: ты вышел из группы проекта.\n"
-                "Вернись в группу, чтобы разблокировать её, или выбери другую: /lichnost"
+            # Check if user is actually in the group now (force check to bypass cache)
+            is_member = await subscription_service.is_in_project_group(
+                user_id=user_id,
+                bot=context.bot,
+                force_check=True
             )
-            return
+
+            if is_member:
+                # User is back in the group! Unblock all their group bonus personalities
+                logger.info(f"User {user_id} is in group, auto-unblocking personalities")
+                await db_service.unblock_group_bonus_personalities(user_id)
+
+                # Refresh personality data to get updated is_blocked status
+                personality = db_service.get_personality(personality_name)
+                if not personality or personality.is_blocked:
+                    await update.message.reply_text(
+                        f"❌ Ошибка при обновлении личности. Попробуй выбрать другую: /{config.COMMAND_PERSONALITY}"
+                    )
+                    return
+
+                # Continue with normal flow (personality is now unblocked)
+                logger.info(f"Personality {personality.name} unblocked, continuing with message handling")
+            else:
+                # User is NOT in the group - show helpful message with button
+                message_text = (
+                    "🔒 Выбранная личность заблокирована.\n\n"
+                    "**Причина:** ты вышел из группы проекта.\n\n"
+                    "💡 **Что делать:**\n"
+                    "• Вернись в группу, чтобы разблокировать личность\n"
+                    f"• Или выбери другую личность: /{config.COMMAND_PERSONALITY}"
+                )
+
+                keyboard = []
+                if config.PROJECT_GROUP_LINK:
+                    keyboard.append([InlineKeyboardButton(
+                        "🔗 Вернуться в группу",
+                        url=config.PROJECT_GROUP_LINK
+                    )])
+                keyboard.append([InlineKeyboardButton(
+                    "🎭 Выбрать другую личность",
+                    callback_data=sign_callback_data("setup_personality")
+                )])
+
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                await update.message.reply_text(
+                    text=message_text,
+                    reply_markup=reply_markup
+                )
+                return
 
         # ================================================
         # MONETIZATION: Check personality usage limit for chat

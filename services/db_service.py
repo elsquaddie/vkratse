@@ -247,7 +247,7 @@ class DBService:
             response = self.client.table('personalities')\
                 .select('*')\
                 .eq('is_active', True)\
-                .or_(f'is_custom.eq.false,created_by_user_id.eq.{user_id}')\
+                .or_(f'is_custom.eq.false,created_by_user_id.eq.{int(user_id)}')\
                 .order('is_custom')\
                 .order('id')\
                 .execute()
@@ -513,7 +513,8 @@ class DBService:
 
             # If user_id provided, filter for messages from user or bot (user_id=None)
             if user_id:
-                query = query.or_(f'user_id.eq.{user_id},user_id.is.null')
+                # SECURITY: use int() to prevent SQL injection
+                query = query.or_(f'user_id.eq.{int(user_id)},user_id.is.null')
 
             response = query.order('created_at', desc=True).limit(limit).execute()
 

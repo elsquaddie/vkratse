@@ -754,7 +754,7 @@ class DBService:
 
     async def deactivate_subscription(self, user_id: int) -> bool:
         """
-        Deactivate user's subscription
+        Deactivate user's subscription (downgrade to Free tier)
 
         Args:
             user_id: Telegram user ID
@@ -765,13 +765,15 @@ class DBService:
         try:
             self.client.table('subscriptions')\
                 .update({
+                    'tier': 'free',
                     'is_active': False,
+                    'expires_at': None,  # Clear expiration date
                     'updated_at': datetime.now(timezone.utc).isoformat()
                 })\
                 .eq('user_id', user_id)\
                 .execute()
 
-            logger.info(f"Subscription deactivated for user {user_id}")
+            logger.info(f"Subscription deactivated for user {user_id} (downgraded to Free tier)")
             return True
         except Exception as e:
             logger.error(f"Error deactivating subscription for {user_id}: {e}")

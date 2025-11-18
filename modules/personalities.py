@@ -295,7 +295,7 @@ async def personality_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     # Handle check group subscription
     elif action == "check_group":
         subscription_service = get_subscription_service()
-        is_member = await subscription_service.check_group_membership(user.id, context.bot)
+        is_member = await subscription_service.is_in_project_group(user.id, context.bot, force_check=True)
 
         if is_member:
             # Recheck limits

@@ -1,0 +1,90 @@
+name: Tests
+
+on:
+  push:
+    branches: [main, develop, security-fixes]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Cache pip
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements*.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+
+      - name: Run linters
+        run: |
+          echo "Running flake8..."
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+          echo "Checking code formatting with black..."
+          black --check .
+
+      - name: Run security checks
+        run: |
+          echo "Running bandit security scan..."
+          bandit -r . -ll -x ./tests
+
+      - name: Run tests
+        env:
+          SECRET_KEY: test_secret_key_for_ci_32_characters_long_abcdef123456
+          TELEGRAM_BOT_TOKEN: test_token
+          TELEGRAM_WEBHOOK_SECRET: test_webhook_secret_32_chars
+          ANTHROPIC_API_KEY: test_api_key
+          ANTHROPIC_MODEL: claude-3-7-sonnet-20250219
+          SUPABASE_URL: https://test.supabase.co
+          SUPABASE_KEY: test_key
+          ENV: test
+        run: |
+          pytest tests/ \
+            --cov=. \
+            --cov-report=xml \
+            --cov-report=html \
+            --cov-report=term-missing \
+            -v
+
+      - name: Check coverage threshold
+        run: |
+          coverage=$(pytest --cov=. --cov-report=term | grep TOTAL | awk '{print $4}' | sed 's/%//')
+          echo "Coverage: ${coverage}%"
+          if [ "${coverage}" -lt 60 ]; then
+            echo "❌ Coverage ${coverage}% is below 60% threshold"
+            exit 1
+          else
+            echo "✅ Coverage ${coverage}% meets 60% threshold"
+          fi
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        if: always()
+        with:
+          file: ./coverage.xml
+          flags: unittests
+          name: codecov-umbrella
+          fail_ci_if_error: false
+
+      - name: Upload coverage artifacts
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: coverage-report
+          path: htmlcov/

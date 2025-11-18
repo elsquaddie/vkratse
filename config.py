@@ -38,6 +38,18 @@ if not SECRET_KEY:
         "Set in Vercel: Settings → Environment Variables → Add SECRET_KEY"
     )
 
+# Telegram Webhook Secret (for webhook verification)
+# SECURITY: This prevents fake webhooks from unauthorized sources
+TELEGRAM_WEBHOOK_SECRET = os.getenv('TELEGRAM_WEBHOOK_SECRET')
+if not TELEGRAM_WEBHOOK_SECRET:
+    raise ValueError(
+        "❌ TELEGRAM_WEBHOOK_SECRET environment variable is required!\n"
+        "Generate: python -c 'import secrets; print(secrets.token_urlsafe(32))'\n"
+        "Set in Vercel: Settings → Environment Variables → Add TELEGRAM_WEBHOOK_SECRET\n"
+        "Update webhook: curl 'https://api.telegram.org/bot<TOKEN>/setWebhook?"
+        "url=https://vkratse.vercel.app&secret_token=<SECRET>'"
+    )
+
 # ================================================
 # BOT SETTINGS
 # ================================================

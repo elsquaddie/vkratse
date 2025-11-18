@@ -573,6 +573,23 @@ def application(environ, start_response):
 
         verbose_log(f"✅ CHECKPOINT 12: Request = {method} {path}")
 
+        # ===== SECURITY: WEBHOOK VERIFICATION (ШАГ 4) =====
+        # Verify Telegram webhook secret to prevent fake webhooks
+        if method == 'POST':
+            webhook_secret = environ.get('HTTP_X_TELEGRAM_BOT_API_SECRET_TOKEN')
+
+            if webhook_secret != config.TELEGRAM_WEBHOOK_SECRET:
+                logger.warning(
+                    f"❌ Webhook verification failed! "
+                    f"IP: {environ.get('REMOTE_ADDR', 'unknown')}, "
+                    f"Secret provided: {webhook_secret[:10] if webhook_secret else 'None'}..."
+                )
+                status = '403 Forbidden'
+                headers = [('Content-Type', 'application/json')]
+                start_response(status, headers)
+                return [b'{"ok": false, "error": "forbidden"}']
+        # ===== END WEBHOOK VERIFICATION =====
+
         # Only accept POST requests for webhook
         if method != 'POST':
             log(f"⚠️ Non-POST request: {method} {path}")

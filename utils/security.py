@@ -70,7 +70,11 @@ def create_string_signature(data: str, user_id: int) -> str:
         hashlib.sha256
     ).hexdigest()[:16]
 
-    logger.info(f"[SIGNATURE CREATE] data='{data}', user_id={user_id}, message='{message}', signature='{signature}'")
+    # SECURITY: Don't log full signatures in production
+    if config.DEBUG_MODE:
+        logger.debug(f"[SIGNATURE CREATE] data='{data}', user_id={user_id}, signature='{signature[:8]}...'")
+    else:
+        logger.debug(f"[SIGNATURE CREATE] data_length={len(data)}, user_id={user_id}")
     return signature
 
 
@@ -97,7 +101,11 @@ def create_group_signature(data: str) -> str:
         hashlib.sha256
     ).hexdigest()[:16]
 
-    logger.info(f"[GROUP SIGNATURE CREATE] data='{data}', signature='{signature}'")
+    # SECURITY: Don't log full signatures in production
+    if config.DEBUG_MODE:
+        logger.debug(f"[GROUP SIGNATURE CREATE] data='{data}', signature='{signature[:8]}...'")
+    else:
+        logger.debug(f"[GROUP SIGNATURE CREATE] data_length={len(data)}")
     return signature
 
 
@@ -121,7 +129,11 @@ def verify_string_signature(data: str, user_id: int, signature: str) -> bool:
     is_valid = hmac.compare_digest(expected, signature)
 
     if not is_valid:
-        logger.warning(f"Invalid signature for data='{data}', user_id={user_id}, expected='{expected}', received='{signature}'")
+        # SECURITY: Don't log full signatures
+        if config.DEBUG_MODE:
+            logger.warning(f"Invalid signature for data='{data}', user_id={user_id}, expected='{expected[:8]}...', received='{signature[:8]}...'")
+        else:
+            logger.warning(f"Invalid signature for data (length={len(data)}), user_id={user_id}")
 
     return is_valid
 
@@ -147,7 +159,11 @@ def verify_group_signature(data: str, signature: str) -> bool:
     is_valid = hmac.compare_digest(expected, signature)
 
     if not is_valid:
-        logger.warning(f"[GROUP SIGNATURE] Invalid signature for data='{data}', expected='{expected}', received='{signature}'")
+        # SECURITY: Don't log full signatures
+        if config.DEBUG_MODE:
+            logger.warning(f"[GROUP SIGNATURE] Invalid signature for data='{data}', expected='{expected[:8]}...', received='{signature[:8]}...'")
+        else:
+            logger.warning(f"[GROUP SIGNATURE] Invalid signature for data (length={len(data)})")
 
     return is_valid
 

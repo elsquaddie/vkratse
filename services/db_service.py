@@ -1,6 +1,8 @@
 """
 Database Service
 Wrapper around Supabase for all database operations
+
+PERFORMANCE FIX (ШАГ 10): Connection pooling with singleton pattern
 """
 
 from datetime import datetime, timedelta, timezone
@@ -9,17 +11,59 @@ from supabase import create_client, Client
 import config
 from config import logger
 from models import Message, Personality, User, Chat
+import atexit
+
+# ================================================
+# SINGLETON SUPABASE CLIENT (ШАГ 10: Connection Pooling)
+# ================================================
+_supabase_client: Client = None
 
 
-class DBService:
-    """Service for database operations using Supabase"""
+def get_supabase_client() -> Client:
+    """
+    Get or create Supabase client (Singleton pattern)
 
-    def __init__(self):
-        """Initialize Supabase client"""
-        self.client: Client = create_client(
+    In serverless, this keeps connection alive between requests
+    in the same worker instance, avoiding connection overhead.
+
+    Returns:
+        Shared Supabase client instance
+    """
+    global _supabase_client
+
+    if _supabase_client is None:
+        logger.info("Creating new Supabase client (singleton)")
+        _supabase_client = create_client(
             config.SUPABASE_URL,
             config.SUPABASE_KEY
         )
+
+    return _supabase_client
+
+
+def cleanup_supabase_client():
+    """Cleanup Supabase client on shutdown"""
+    global _supabase_client
+    if _supabase_client is not None:
+        logger.info("Cleaning up Supabase client")
+        _supabase_client = None
+
+
+# Register cleanup on exit
+atexit.register(cleanup_supabase_client)
+
+# ================================================
+# END SINGLETON PATTERN
+# ================================================
+
+
+class DBService:
+    """Service for database operations using Supabase with connection pooling"""
+
+    def __init__(self):
+        """Initialize DB service (reuses singleton client)"""
+        # Use singleton instead of creating new client
+        self.client = get_supabase_client()
 
     # ================================================
     # MESSAGES

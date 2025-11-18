@@ -904,8 +904,12 @@ async def mystatus_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             else:
                 expires_at = expires_at_str
 
+            # Ensure timezone-aware datetime
+            if expires_at.tzinfo is None:
+                expires_at = expires_at.replace(tzinfo=timezone.utc)
+
             # Calculate days left
-            days_left = (expires_at - datetime.now(expires_at.tzinfo or timezone.utc)).days
+            days_left = (expires_at - datetime.now(timezone.utc)).days
 
             message += f"Активен до: {expires_at.strftime('%Y-%m-%d')}\n"
             message += f"Осталось: {days_left} дней\n"

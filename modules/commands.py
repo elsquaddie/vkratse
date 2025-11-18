@@ -307,6 +307,11 @@ async def handle_start_menu_callback(update: Update, context: ContextTypes.DEFAU
             if current_tier != 'pro':
                 # Show buy button only for non-Pro users
                 keyboard.append([InlineKeyboardButton("💳 Купить Pro", callback_data=sign_callback_data("buy_pro"))])
+            else:
+                # Show cancel button only for active Pro users
+                subscription = await db.get_subscription(user_id)
+                if subscription and subscription.get('is_active'):
+                    keyboard.append([InlineKeyboardButton("❌ Отменить подписку", callback_data=sign_callback_data("cancel_subscription"))])
 
             # Tribute donation link
             if config.TRIBUTE_URL and config.TRIBUTE_URL != 'https://tribute.to/your_bot_page':
@@ -523,6 +528,159 @@ async def handle_start_menu_callback(update: Update, context: ContextTypes.DEFAU
                     ]])
                 )
 
+        elif action == "cancel_subscription":
+            # Show confirmation dialog for subscription cancellation
+            from services import DBService, SubscriptionService
+
+            user_id = query.from_user.id
+
+            # Get subscription info
+            db = DBService()
+            sub_service = SubscriptionService(db)
+            subscription = await db.get_subscription(user_id)
+
+            if not subscription or not subscription.get('is_active'):
+                await query.edit_message_text(
+                    "❌ У тебя нет активной подписки.",
+                    reply_markup=InlineKeyboardMarkup([[
+                        InlineKeyboardButton("« Назад", callback_data=sign_callback_data("show_premium"))
+                    ]])
+                )
+                return
+
+            # Get expiry date
+            expires_at_str = subscription.get('expires_at')
+            if isinstance(expires_at_str, str):
+                from datetime import datetime
+                expires_at = datetime.fromisoformat(expires_at_str.replace('Z', '+00:00'))
+                expiry_text = expires_at.strftime('%Y-%m-%d')
+            else:
+                expiry_text = "неизвестно"
+
+            # Get payment method
+            payment_method = subscription.get('payment_method', 'unknown')
+            payment_method_text = {
+                'telegram_stars': '⭐ Telegram Stars',
+                'yookassa': '💳 Банковская карта',
+                'card_dryrun': '💳 Карта (тест)',
+                'stars_dryrun': '⭐ Stars (тест)',
+                'tribute': '🎁 Tribute',
+                'manual': '👤 Вручную'
+            }.get(payment_method, payment_method)
+
+            # Show confirmation
+            message = "❌ Отмена подписки\n\n"
+            message += "Ты уверен?\n\n"
+            message += f"Способ оплаты: {payment_method_text}\n"
+            message += f"Активна до: {expiry_text}\n\n"
+            message += "После отмены:\n"
+            message += "• Подписка будет деактивирована немедленно\n"
+            message += "• Доступ к Pro функциям прекратится\n"
+            message += "• Вернёшься на Free тариф\n"
+            message += "• Возврат средств не предусмотрен\n\n"
+            message += "⚠️ Это действие необратимо!"
+
+            keyboard = [
+                [InlineKeyboardButton("✅ Да, отменить", callback_data=sign_callback_data("confirm_cancel_subscription"))],
+                [InlineKeyboardButton("❌ Нет, оставить", callback_data=sign_callback_data("show_premium"))]
+            ]
+
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_text(message, reply_markup=reply_markup)
+
+        elif action == "confirm_cancel_subscription":
+            # Actually cancel the subscription
+            from services import DBService, SubscriptionService
+            from datetime import datetime
+
+            user_id = query.from_user.id
+
+            try:
+                # Initialize services
+                db = DBService()
+                sub_service = SubscriptionService(db)
+
+                # Get subscription for logging
+                subscription = await db.get_subscription(user_id)
+                payment_method = subscription.get('payment_method', 'unknown') if subscription else 'unknown'
+
+                # DRY RUN MODE: Just deactivate without any API calls
+                if config.PAYMENT_DRY_RUN:
+                    logger.info(f"[DRY RUN] Cancelling subscription for user {user_id}")
+
+                    # Deactivate subscription
+                    success = await db.deactivate_subscription(user_id)
+
+                    if success:
+                        # Block excess custom personalities (Pro->Free: keep 0, block all)
+                        await db.block_excess_custom_personalities(user_id, limit=0)
+
+                        message = "✅ Подписка отменена! (DRY RUN)\n\n"
+                        message += "🎉 Отмена выполнена в тестовом режиме.\n\n"
+                        message += "Ты вернулся на Free тариф:\n"
+                        message += "• 30 сообщений/день\n"
+                        message += "• 3 саммари в ЛС/день\n"
+                        message += "• 3 саммари в группах/день\n"
+                        message += "• 5 использований личности/день\n\n"
+                        message += "⚠️ Это был тестовый режим.\n"
+                        message += "Для реальной отмены отключи PAYMENT_DRY_RUN."
+
+                        keyboard = [[InlineKeyboardButton("« К Premium", callback_data=sign_callback_data("show_premium"))]]
+                        reply_markup = InlineKeyboardMarkup(keyboard)
+                        await query.edit_message_text(message, reply_markup=reply_markup)
+                        return
+
+                # REAL MODE: Cancel subscription
+                # Note: Both Telegram Stars and YooKassa in our implementation are one-time payments,
+                # not recurring subscriptions. So we just deactivate the subscription in DB.
+                # No API calls needed to payment providers.
+
+                logger.info(
+                    f"Cancelling subscription for user {user_id}, "
+                    f"payment_method={payment_method}"
+                )
+
+                # Deactivate subscription
+                success = await db.deactivate_subscription(user_id)
+
+                if success:
+                    # Block excess custom personalities (Pro->Free: keep 0, block all)
+                    await db.block_excess_custom_personalities(user_id, limit=0)
+
+                    message = "✅ Подписка отменена!\n\n"
+                    message += "Ты вернулся на Free тариф:\n"
+                    message += "• 30 сообщений/день\n"
+                    message += "• 3 саммари в ЛС/день\n"
+                    message += "• 3 саммари в группах/день\n"
+                    message += "• 5 использований личности/день\n\n"
+                    message += "💡 Ты всегда можешь вернуться к Pro!\n"
+                    message += "Используй /premium для повторной подписки."
+
+                    keyboard = [[InlineKeyboardButton("« К Premium", callback_data=sign_callback_data("show_premium"))]]
+                    reply_markup = InlineKeyboardMarkup(keyboard)
+                    await query.edit_message_text(message, reply_markup=reply_markup)
+
+                    logger.info(f"Subscription cancelled successfully for user {user_id}")
+                else:
+                    logger.error(f"Failed to cancel subscription for user {user_id}")
+                    await query.edit_message_text(
+                        "❌ Ошибка при отмене подписки.\n\n"
+                        "Попробуй позже или обратись в поддержку.",
+                        reply_markup=InlineKeyboardMarkup([[
+                            InlineKeyboardButton("« Назад", callback_data=sign_callback_data("show_premium"))
+                        ]])
+                    )
+
+            except Exception as e:
+                logger.error(f"Error cancelling subscription for user {user_id}: {e}", exc_info=True)
+                await query.edit_message_text(
+                    "❌ Критическая ошибка при отмене подписки.\n\n"
+                    "Обратись в поддержку.",
+                    reply_markup=InlineKeyboardMarkup([[
+                        InlineKeyboardButton("« Назад", callback_data=sign_callback_data("show_premium"))
+                    ]])
+                )
+
         else:
             await query.edit_message_text("❌ Неизвестное действие. Попробуй /start")
 
@@ -648,6 +806,11 @@ async def premium_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if current_tier != 'pro':
         # Show buy button only for non-Pro users
         keyboard.append([InlineKeyboardButton("💳 Купить Pro", callback_data=sign_callback_data("buy_pro"))])
+    else:
+        # Show cancel button only for active Pro users
+        subscription = await db.get_subscription(user_id)
+        if subscription and subscription.get('is_active'):
+            keyboard.append([InlineKeyboardButton("❌ Отменить подписку", callback_data=sign_callback_data("cancel_subscription"))])
 
     # Tribute donation link
     if config.TRIBUTE_URL and config.TRIBUTE_URL != 'https://tribute.to/your_bot_page':

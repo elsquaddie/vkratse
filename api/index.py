@@ -424,10 +424,10 @@ def create_bot_application():
     app.add_handler(personality_conv)
 
     # Direct chat handlers (Phase 2)
-    # Handle /start menu callbacks
+    # Handle /start menu callbacks (including payment callbacks)
     app.add_handler(CallbackQueryHandler(
         handle_start_menu_callback,
-        pattern="^(direct_chat|setup_personality|dm_summary|group_summary|group_judge|back_to_main):"
+        pattern="^(direct_chat|setup_personality|dm_summary|group_summary|group_judge|back_to_main|show_premium|buy_pro|buy_pro_card|buy_pro_stars|buy_pro_tribute):"
     ))
 
     # Handle personality selection callbacks

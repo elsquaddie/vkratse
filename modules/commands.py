@@ -331,8 +331,8 @@ async def handle_start_menu_callback(update: Update, context: ContextTypes.DEFAU
             # Telegram Stars payment (native, always available)
             keyboard.append([InlineKeyboardButton("⭐ Telegram Stars (300 ⭐)", callback_data=sign_callback_data("buy_pro_stars"))])
 
-            # YooKassa payment (if configured)
-            if is_yookassa_configured():
+            # YooKassa payment (if configured OR dry run mode)
+            if is_yookassa_configured() or config.PAYMENT_DRY_RUN:
                 keyboard.append([InlineKeyboardButton("💳 Банковская карта", callback_data=sign_callback_data("buy_pro_card"))])
 
             # Tribute donation (if configured)
@@ -452,8 +452,6 @@ async def handle_start_menu_callback(update: Update, context: ContextTypes.DEFAU
             try:
                 # DRY RUN MODE: Simulate successful payment
                 if config.PAYMENT_DRY_RUN:
-                    await query.edit_message_text("🧪 DRY RUN: Эмуляция оплаты...")
-
                     # Grant subscription
                     await db_service.create_or_update_subscription(
                         user_id=user_id,
@@ -473,13 +471,10 @@ async def handle_start_menu_callback(update: Update, context: ContextTypes.DEFAU
                     await query.edit_message_text(message, reply_markup=reply_markup)
                     return
 
-                # Show loading message
-                await query.edit_message_text("⏳ Создаю счёт для оплаты...")
-
                 # Get pricing info
                 pricing = get_stars_pricing_info('pro_monthly')
 
-                # Create Stars invoice
+                # Create Stars invoice (no loading message - happens instantly)
                 result = await create_stars_invoice(
                     bot=context.bot,
                     user_id=user_id,

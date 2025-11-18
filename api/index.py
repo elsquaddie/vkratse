@@ -637,13 +637,41 @@ def application(environ, start_response):
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
 
-        # Run the update processing and wait for all tasks to complete
-        loop.run_until_complete(process_update(update_data))
+        # Run the update processing with timeout (8 seconds, Vercel limit is 10s)
+        try:
+            loop.run_until_complete(
+                asyncio.wait_for(process_update(update_data), timeout=8.0)
+            )
+        except asyncio.TimeoutError:
+            log("❌ Update processing timeout (>8s)")
+            status = '504 Gateway Timeout'
+            headers = [('Content-Type', 'application/json')]
+            start_response(status, headers)
+            return [json.dumps({'ok': False, 'error': 'timeout'}).encode('utf-8')]
 
-        # Give pending tasks a chance to complete (important for telegram API calls)
-        pending = asyncio.all_tasks(loop)
+        # SECURITY FIX: Give pending tasks a chance to complete (important for telegram API calls)
+        # Filter to only OUR tasks, not tasks from other concurrent requests
+        current = asyncio.current_task(loop)
+        pending = [
+            task for task in asyncio.all_tasks(loop)
+            if not task.done() and task != current
+        ]
+
         if pending:
-            loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+            verbose_log(f"⏳ Waiting for {len(pending)} pending tasks to complete")
+            try:
+                results = loop.run_until_complete(
+                    asyncio.gather(*pending, return_exceptions=True)
+                )
+
+                # Log any exceptions from pending tasks
+                for i, result in enumerate(results):
+                    if isinstance(result, Exception):
+                        log(f"⚠️ Pending task {i} failed: {result}")
+            except asyncio.TimeoutError:
+                log("⚠️ Timeout waiting for pending tasks")
+            except Exception as e:
+                log(f"⚠️ Error in pending tasks cleanup: {e}")
 
         verbose_log("✅ CHECKPOINT 15: Webhook processed successfully")
 

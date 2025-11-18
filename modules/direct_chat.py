@@ -30,7 +30,7 @@ async def show_personality_selection(
     show_back_button: bool = False
 ) -> None:
     """
-    Show personality selection menu to the user.
+    Show personality selection menu to the user (unified version).
 
     Args:
         update: Telegram update object
@@ -39,72 +39,22 @@ async def show_personality_selection(
         show_back_button: If True, show back button to main menu
     """
     try:
+        from utils import build_personality_menu
+
         user_id = update.effective_user.id
 
-        # Get all personalities (base + user's custom)
-        all_personalities = db_service.get_all_personalities()
+        # Build menu using universal function
+        reply_markup = build_personality_menu(
+            user_id=user_id,
+            callback_prefix="sel_pers",
+            context="select",
+            current_personality=None,  # No checkmark - user always makes conscious choice
+            show_create_button=True,
+            show_back_button=show_back_button,
+            back_callback="back_to_main"
+        )
 
-        # Separate base and custom personalities
-        base_personalities = [p for p in all_personalities if not p.is_custom]
-        custom_personalities = [p for p in all_personalities if p.is_custom and p.created_by_user_id == user_id]
-
-        # Build inline keyboard (2 columns layout)
-        keyboard = []
-
-        # Add base personalities in rows of 2
-        for i in range(0, len(base_personalities), 2):
-            row = []
-            for j in range(2):
-                if i + j < len(base_personalities):
-                    p = base_personalities[i + j]
-                    callback_data = sign_callback_data(f"sel_pers:{p.id}")
-                    row.append(InlineKeyboardButton(
-                        f"{p.emoji} {p.display_name}",
-                        callback_data=callback_data
-                    ))
-            keyboard.append(row)
-
-        # Add custom personalities
-        if custom_personalities:
-            # No separator button - just add custom personalities directly
-            for i in range(0, len(custom_personalities), 2):
-                row = []
-                for j in range(2):
-                    if i + j < len(custom_personalities):
-                        p = custom_personalities[i + j]
-                        callback_data = sign_callback_data(f"sel_pers:{p.id}")
-                        row.append(InlineKeyboardButton(
-                            f"{p.emoji} {p.display_name}",
-                            callback_data=callback_data
-                        ))
-                keyboard.append(row)
-
-        # Add "Create custom personality" button (starts personality creation flow)
-        keyboard.append([InlineKeyboardButton(
-            "➕ Создать свою личность",
-            callback_data="pers:create_start"  # Same as in personality_menu.py
-        )])
-
-        # Add back button if needed
-        if show_back_button:
-            keyboard.append([InlineKeyboardButton(
-                "◀️ Назад",
-                callback_data=sign_callback_data("back_to_main")
-            )])
-
-        reply_markup = InlineKeyboardMarkup(keyboard)
-
-        # Build text based on available personalities
-        if custom_personalities:
-            text = """🎭 Выбери личность для общения:
-
-📚 БАЗОВЫЕ ЛИЧНОСТИ:
-(первые {} варианта)
-
-✨ ТВОИ ЛИЧНОСТИ:
-(следующие {} варианта)""".format(len(base_personalities), len(custom_personalities))
-        else:
-            text = """🎭 Выбери личность для общения:
+        text = """🎭 Выбери личность для общения:
 
 Каждая личность имеет свой уникальный стиль и подход к разговору."""
 
@@ -352,7 +302,7 @@ async def handle_direct_message(
 async def chat_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     Handle /chat command in group chats.
-    Shows personality selection menu for starting a chat session.
+    Shows personality selection menu for starting a chat session (unified version).
 
     Args:
         update: Telegram update object
@@ -370,45 +320,19 @@ async def chat_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         return
 
     try:
-        # Get all personalities (base + user's custom)
-        all_personalities = db_service.get_all_personalities()
+        from utils import build_personality_menu
 
-        # Separate base and custom personalities
-        base_personalities = [p for p in all_personalities if not p.is_custom]
-        custom_personalities = [p for p in all_personalities if p.is_custom and p.created_by_user_id == user.id]
-
-        # Build inline keyboard (2 columns layout)
-        keyboard = []
-
-        # Add base personalities in rows of 2
-        for i in range(0, len(base_personalities), 2):
-            row = []
-            for j in range(2):
-                if i + j < len(base_personalities):
-                    p = base_personalities[i + j]
-                    # Format: start_chat_session:personality_id:user_id
-                    callback_data = sign_callback_data(f"start_chat:{p.id}:{user.id}")
-                    row.append(InlineKeyboardButton(
-                        f"{p.emoji} {p.display_name}",
-                        callback_data=callback_data
-                    ))
-            keyboard.append(row)
-
-        # Add custom personalities
-        if custom_personalities:
-            for i in range(0, len(custom_personalities), 2):
-                row = []
-                for j in range(2):
-                    if i + j < len(custom_personalities):
-                        p = custom_personalities[i + j]
-                        callback_data = sign_callback_data(f"start_chat:{p.id}:{user.id}")
-                        row.append(InlineKeyboardButton(
-                            f"{p.emoji} {p.display_name}",
-                            callback_data=callback_data
-                        ))
-                keyboard.append(row)
-
-        reply_markup = InlineKeyboardMarkup(keyboard)
+        # Build menu using universal function
+        # Pass user_id in extra_callback_data so only this user can select personality
+        reply_markup = build_personality_menu(
+            user_id=user.id,
+            callback_prefix="start_chat",
+            context="select",
+            current_personality=None,  # No checkmark
+            extra_callback_data={"user_id": user.id},  # Include initiator's user_id
+            show_create_button=False,  # Don't show create button in group chat context
+            show_back_button=False
+        )
 
         # Build text
         text = "🎭 Выбери личность для общения в этом чате:\n\n💬 После выбора я буду отвечать только на твои сообщения (через reply или @упоминание)"

@@ -451,6 +451,8 @@ async def _execute_summary(
         timeframe: Timeframe string (e.g., "50", "100", "1h", "2h", "today")
         context: Bot context
     """
+    from telegram.error import BadRequest
+
     db = DBService()
     ai = AIService()
     subscription = SubscriptionService(db)
@@ -472,7 +474,11 @@ async def _execute_summary(
             f"💎 Pro-подписка дает безлимитное использование всех личностей!\n"
             f"Узнать больше: /premium"
         )
-        await query.message.edit_text(message_text)
+        try:
+            await query.message.edit_text(message_text)
+        except BadRequest as e:
+            if "message is not modified" not in str(e).lower():
+                raise
         return
 
     # Parse timeframe
@@ -485,7 +491,11 @@ async def _execute_summary(
         # Time-based (1h, 2h, today)
         since, period_desc = parse_time_argument(timeframe)
         if since is None:
-            await query.message.reply_text(f"❌ Неверный формат времени: {period_desc}")
+            try:
+                await query.message.edit_text(f"❌ Неверный формат времени: {period_desc}")
+            except BadRequest as e:
+                if "message is not modified" not in str(e).lower():
+                    raise
             return
         limit = config.MAX_MESSAGES_PER_SUMMARY
 
@@ -497,27 +507,41 @@ async def _execute_summary(
     )
 
     if not messages:
-        await query.message.edit_text(f"📭 Нет сообщений за период: {period_desc}")
+        try:
+            await query.message.edit_text(f"📭 Нет сообщений за период: {period_desc}")
+        except BadRequest as e:
+            if "message is not modified" not in str(e).lower():
+                raise
         return
 
-    # Generate summary
-    await query.message.edit_text(
-        f"⏳ Генерирую саммари...\n\n"
-        f"🎭 Личность: {personality.emoji} {personality.display_name}\n"
-        f"📊 Период: {period_desc}"
-    )
+    # Generate summary - show loading message
+    try:
+        await query.message.edit_text(
+            f"⏳ Генерирую саммари...\n\n"
+            f"🎭 Личность: {personality.emoji} {personality.display_name}\n"
+            f"📊 Период: {period_desc}"
+        )
+    except BadRequest as e:
+        if "message is not modified" not in str(e).lower():
+            raise
+        # If message wasn't modified (e.g., user clicked twice), continue anyway
 
     try:
         summary = ai.generate_summary(messages, personality, period_desc)
 
         # Send summary
-        await query.message.edit_text(
-            f"📝 Саммари готово!\n\n"
-            f"🎭 {personality.emoji} {personality.display_name}\n"
-            f"📊 {period_desc}\n"
-            f"💬 Сообщений: {len(messages)}\n\n"
-            f"{summary}"
-        )
+        try:
+            await query.message.edit_text(
+                f"📝 Саммари готово!\n\n"
+                f"🎭 {personality.emoji} {personality.display_name}\n"
+                f"📊 {period_desc}\n"
+                f"💬 Сообщений: {len(messages)}\n\n"
+                f"{summary}"
+            )
+        except BadRequest as e:
+            if "message is not modified" not in str(e).lower():
+                raise
+            # If message wasn't modified, summary was already sent
 
         # ================================================
         # MONETIZATION: Increment usage counter after successful summary
@@ -555,12 +579,29 @@ async def _execute_summary(
             'personality': personality.name
         })
 
+    except BadRequest as e:
+        # Handle BadRequest separately from general exceptions
+        if "message is not modified" not in str(e).lower():
+            logger.error(f"BadRequest error generating summary: {e}")
+            try:
+                await query.message.edit_text(
+                    f"❌ Ошибка при генерации саммари. Попробуй позже.\n\n"
+                    f"Детали: {str(e)[:100]}"
+                )
+            except BadRequest:
+                # If we can't edit the message, just log it
+                pass
     except Exception as e:
         logger.error(f"Error generating summary: {e}")
-        await query.message.edit_text(
-            f"❌ Ошибка при генерации саммари. Попробуй позже.\n\n"
-            f"Детали: {str(e)[:100]}"
-        )
+        try:
+            await query.message.edit_text(
+                f"❌ Ошибка при генерации саммари. Попробуй позже.\n\n"
+                f"Детали: {str(e)[:100]}"
+            )
+        except BadRequest as e:
+            if "message is not modified" not in str(e).lower():
+                raise
+            # If message wasn't modified, error was already shown
 
 
 async def dm_summary_personality_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

@@ -348,17 +348,20 @@ async def handle_start_menu_callback(update: Update, context: ContextTypes.DEFAU
         elif action == "buy_pro_card":
             # Create payment link via YooKassa
             from services.payments import create_payment_link, PaymentError, get_pricing_info
-            from services import db_service
+            from services.db_service import DBService
+            from services.subscription import SubscriptionService
 
             user_id = query.from_user.id
 
             try:
                 # DRY RUN MODE: Simulate successful payment
                 if config.PAYMENT_DRY_RUN:
-                    await query.edit_message_text("🧪 DRY RUN: Эмуляция оплаты...")
+                    # Initialize services
+                    db = DBService()
+                    sub_service = SubscriptionService(db)
 
                     # Grant subscription
-                    await db_service.create_or_update_subscription(
+                    await sub_service.create_or_update_subscription(
                         user_id=user_id,
                         tier='pro',
                         payment_method='card_dryrun',
@@ -445,15 +448,20 @@ async def handle_start_menu_callback(update: Update, context: ContextTypes.DEFAU
         elif action == "buy_pro_stars":
             # Create invoice for Telegram Stars payment
             from services.payments import create_stars_invoice, PaymentError, get_stars_pricing_info
-            from services import db_service
+            from services.db_service import DBService
+            from services.subscription import SubscriptionService
 
             user_id = query.from_user.id
 
             try:
                 # DRY RUN MODE: Simulate successful payment
                 if config.PAYMENT_DRY_RUN:
+                    # Initialize services
+                    db = DBService()
+                    sub_service = SubscriptionService(db)
+
                     # Grant subscription
-                    await db_service.create_or_update_subscription(
+                    await sub_service.create_or_update_subscription(
                         user_id=user_id,
                         tier='pro',
                         payment_method='stars_dryrun',

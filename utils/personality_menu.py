@@ -214,10 +214,22 @@ def _build_callback_data(
 
         return f"{callback_prefix}:{callback_base}:{signature}"
 
+    elif callback_prefix == "sel_pers":
+        # Format: "sel_pers:<personality_id>:<signature>" (for direct chat in DM)
+        # Used by direct_chat.show_personality_selection()
+        from utils.security import sign_callback_data
+        callback_data = f"{callback_prefix}:{personality.id}"
+        return sign_callback_data(callback_data)
+
     elif callback_prefix == "start_chat":
-        # Format: "start_chat:personality_name" (for /chat command)
-        # TODO: Add signature when /chat is implemented
-        return f"{callback_prefix}:{personality.name}"
+        # Format: "start_chat:<personality_id>:<user_id>:<signature>" (for /chat command in groups)
+        # Need user_id to ensure only the person who initiated /chat can select
+        from utils.security import sign_callback_data
+
+        # user_id should be passed in extra_data for group chat sessions
+        initiator_user_id = extra_data.get("user_id") if extra_data else user_id
+        callback_data = f"{callback_prefix}:{personality.id}:{initiator_user_id}"
+        return sign_callback_data(callback_data)
 
     elif callback_prefix == "judge_personality":
         # Format: "judge_personality:<chat_id>:<personality_id>:<signature>"

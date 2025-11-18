@@ -190,6 +190,9 @@ if bot_initialized:
 
     async def handle_bot_added_to_chat(update: Update, context) -> None:
         """Handle bot being added to a chat"""
+        from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+        from utils.security import sign_callback_data
+
         message = update.message
         chat = message.chat
 
@@ -206,23 +209,27 @@ if bot_initialized:
                     chat_type=chat.type
                 )
 
-                # Send welcome message
+                # Send welcome message with inline buttons
                 welcome_text = f"""👋 Привет! Я бот с разными личностями.
 
 📝 **Важно:** Я могу саммаризировать и рассуждать только те сообщения, которые появятся **после** моего добавления в чат. История до моего прихода мне не видна!
 
-🎭 **Что я умею:**
-• /{config.COMMAND_SUMMARY} - создать саммари обсуждения в выбранном стиле
-• /{config.COMMAND_CHAT} - пообщаться напрямую в группе
-• /{config.COMMAND_JUDGE} - рассудить спор
+🎭 **Выбери что сделать:**"""
 
-💬 Начните общаться в чате, чтобы я мог вам помочь!
-📚 Полная справка: /{config.COMMAND_HELP}"""
+                # Create inline keyboard (same as /start for groups)
+                keyboard = [
+                    [InlineKeyboardButton("📝 Сделать саммари", callback_data=sign_callback_data("group_summary"))],
+                    [InlineKeyboardButton("💬 Общаться напрямую", callback_data=sign_callback_data("direct_chat"))],
+                    [InlineKeyboardButton("⚖️ Рассудить", callback_data=sign_callback_data("group_judge"))],
+                    [InlineKeyboardButton("🎭 Настроить личность", callback_data=sign_callback_data("setup_personality"))]
+                ]
+                reply_markup = InlineKeyboardMarkup(keyboard)
 
                 try:
                     await context.bot.send_message(
                         chat_id=chat.id,
-                        text=welcome_text
+                        text=welcome_text,
+                        reply_markup=reply_markup
                     )
                     logger.info(f"Welcome message sent to chat {chat.id}")
                 except Exception as e:

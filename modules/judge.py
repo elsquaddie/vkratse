@@ -3,7 +3,7 @@ Judge command (/рассуди)
 AI judges disputes in chat
 """
 
-from telegram import Update
+from telegram import Update, ReplyKeyboardRemove
 from telegram.ext import ContextTypes, ConversationHandler
 import config
 from config import logger
@@ -138,7 +138,8 @@ async def cancel_judge(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
 
     await update.message.reply_text(
         "❌ Судейство отменено.\n\n"
-        "Чтобы начать заново, используй /rassudi"
+        "Чтобы начать заново, используй /rassudi",
+        reply_markup=ReplyKeyboardRemove()
     )
 
     return ConversationHandler.END
@@ -164,6 +165,15 @@ async def handle_judge_cancel_callback(update: Update, context: ContextTypes.DEF
         "❌ Судейство отменено.\n\n"
         "Чтобы начать заново, используй /rassudi"
     )
+
+    # Remove reply keyboard if it exists
+    try:
+        await update.effective_message.reply_text(
+            "✅ Отменено",
+            reply_markup=ReplyKeyboardRemove()
+        )
+    except Exception as e:
+        logger.warning(f"Failed to remove reply keyboard: {e}")
 
 
 async def handle_judge_personality_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -272,6 +282,17 @@ async def handle_judge_personality_callback(update: Update, context: ContextType
 
         # Edit the message with verdict
         await query.edit_message_text(verdict_message)
+
+        # Remove reply keyboard if it exists (from group_judge menu)
+        # This restores the default command menu "/"
+        try:
+            await update.effective_message.reply_text(
+                "✅ Вердикт вынесен!",
+                reply_markup=ReplyKeyboardRemove()
+            )
+        except Exception as e:
+            # If message fails (e.g., in channel), just log and continue
+            logger.warning(f"Failed to remove reply keyboard: {e}")
 
         # ================================================
         # MONETIZATION: Increment usage counter after successful verdict

@@ -434,7 +434,7 @@ def create_bot_application():
     # Handle /start menu callbacks (including payment callbacks)
     app.add_handler(CallbackQueryHandler(
         handle_start_menu_callback,
-        pattern="^(direct_chat|setup_personality|dm_summary|group_summary|group_judge|back_to_main|show_premium|buy_pro|buy_pro_card|buy_pro_stars|buy_pro_tribute):"
+        pattern="^(direct_chat|setup_personality|dm_summary|group_summary|group_judge|back_to_main|show_premium|buy_pro|buy_pro_card|buy_pro_stars|buy_pro_tribute|cancel_subscription|confirm_cancel_subscription):"
     ))
 
     # Handle personality selection callbacks

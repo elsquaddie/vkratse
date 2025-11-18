@@ -743,7 +743,7 @@ class DBService:
 
             logger.info(f"Upserting data to subscriptions table: {data}")
 
-            result = self.client.table('subscriptions').upsert(data).execute()
+            result = self.client.table('subscriptions').upsert(data, on_conflict='user_id').execute()
 
             logger.info(f"Upsert result: {result.data if hasattr(result, 'data') else 'no data'}")
             logger.info(f"Subscription created/updated successfully for user {user_id}: {tier}, {duration_days} days")

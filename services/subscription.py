@@ -53,6 +53,11 @@ class SubscriptionService:
                 if isinstance(expires_at, str):
                     expires_at = datetime.fromisoformat(expires_at.replace('Z', '+00:00'))
 
+                # Ensure timezone-aware datetime for comparison
+                if expires_at.tzinfo is None:
+                    # If naive datetime, assume UTC
+                    expires_at = expires_at.replace(tzinfo=timezone.utc)
+
                 # Check if expired
                 if expires_at < datetime.now(timezone.utc):
                     logger.info(f"Subscription expired for user {user_id}")
@@ -313,6 +318,10 @@ class SubscriptionService:
                     checked_at = cache.get('checked_at')
                     if isinstance(checked_at, str):
                         checked_at = datetime.fromisoformat(checked_at.replace('Z', '+00:00'))
+
+                    # Ensure timezone-aware datetime for comparison
+                    if checked_at.tzinfo is None:
+                        checked_at = checked_at.replace(tzinfo=timezone.utc)
 
                     # Cache valid for 1 hour
                     if (datetime.now(timezone.utc) - checked_at).seconds < 3600:

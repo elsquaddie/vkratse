@@ -725,7 +725,13 @@ class DBService:
         try:
             expires_at = datetime.now(timezone.utc) + timedelta(days=duration_days)
 
-            self.client.table('subscriptions').upsert({
+            logger.info(
+                f"Creating/updating subscription for user {user_id}: "
+                f"tier={tier}, duration={duration_days} days, "
+                f"payment_method={payment_method}, expires_at={expires_at.isoformat()}"
+            )
+
+            data = {
                 'user_id': user_id,
                 'tier': tier,
                 'expires_at': expires_at.isoformat(),
@@ -733,12 +739,17 @@ class DBService:
                 'transaction_id': transaction_id,
                 'is_active': True,
                 'updated_at': datetime.now(timezone.utc).isoformat()
-            }).execute()
+            }
 
-            logger.info(f"Subscription created/updated for user {user_id}: {tier}, {duration_days} days")
+            logger.info(f"Upserting data to subscriptions table: {data}")
+
+            result = self.client.table('subscriptions').upsert(data).execute()
+
+            logger.info(f"Upsert result: {result.data if hasattr(result, 'data') else 'no data'}")
+            logger.info(f"Subscription created/updated successfully for user {user_id}: {tier}, {duration_days} days")
             return True
         except Exception as e:
-            logger.error(f"Error creating/updating subscription for {user_id}: {e}")
+            logger.error(f"Error creating/updating subscription for {user_id}: {e}", exc_info=True)
             return False
 
     async def deactivate_subscription(self, user_id: int) -> bool:

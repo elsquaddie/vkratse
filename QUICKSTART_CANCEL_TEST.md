@@ -75,6 +75,24 @@ PAYMENT_DRY_RUN=true
 
 ## 🐛 Что-то не так?
 
+### Подписка не активируется (показывает Free после "успеха")
+**📖 См. подробное руководство:** [DRY_RUN_DEBUGGING.md](DRY_RUN_DEBUGGING.md)
+
+**Быстрая проверка:**
+1. Открой Vercel → Function Logs
+2. Найди строки:
+   ```
+   [DRY RUN] Processing Stars payment for user ...
+   Creating/updating subscription for user ...
+   Upsert result: ...
+   [DRY RUN] Verification: subscription={...}
+   ```
+3. Если `subscription=None` - запись не создалась в БД
+4. Проверь таблицу `subscriptions` в Supabase:
+   ```sql
+   SELECT * FROM subscriptions WHERE user_id = YOUR_TELEGRAM_ID;
+   ```
+
 ### Кнопка "Отменить подписку" не появляется
 - Проверь что подписка активна: `/mystatus`
 - Проверь в БД: `SELECT * FROM subscriptions WHERE user_id = YOUR_ID`

@@ -355,29 +355,51 @@ async def handle_start_menu_callback(update: Update, context: ContextTypes.DEFAU
             from services.payments import create_payment_link, PaymentError, get_pricing_info
             from services.db_service import DBService
             from services.subscription import SubscriptionService
+            from datetime import datetime
 
             user_id = query.from_user.id
 
             try:
                 # DRY RUN MODE: Simulate successful payment
                 if config.PAYMENT_DRY_RUN:
+                    logger.info(f"[DRY RUN] Processing card payment for user {user_id}")
+
                     # Initialize services
                     db = DBService()
                     sub_service = SubscriptionService(db)
 
                     # Grant subscription
-                    await sub_service.create_or_update_subscription(
+                    success = await sub_service.create_or_update_subscription(
                         user_id=user_id,
                         tier='pro',
                         payment_method='card_dryrun',
-                        duration_days=30
+                        duration_days=30,
+                        transaction_id=f'dryrun_card_{user_id}_{int(datetime.now().timestamp())}'
                     )
+
+                    if not success:
+                        logger.error(f"[DRY RUN] Failed to create subscription for user {user_id}")
+                        await query.edit_message_text(
+                            "❌ Ошибка при активации подписки (DRY RUN)\n\n"
+                            "Проверь логи в Vercel.",
+                            reply_markup=InlineKeyboardMarkup([[
+                                InlineKeyboardButton("« Назад", callback_data=sign_callback_data("buy_pro"))
+                            ]])
+                        )
+                        return
+
+                    logger.info(f"[DRY RUN] Subscription created successfully for user {user_id}")
+
+                    # Verify subscription was created
+                    subscription = await db.get_subscription(user_id)
+                    logger.info(f"[DRY RUN] Verification: subscription={subscription}")
 
                     # Show success message
                     message = "✅ Подписка активирована! (DRY RUN)\n\n"
                     message += "🎉 Теперь у тебя Pro подписка на 30 дней!\n\n"
                     message += "⚠️ Это тестовая активация.\n"
-                    message += "Для реальных платежей отключи PAYMENT_DRY_RUN в настройках."
+                    message += "Для реальных платежей отключи PAYMENT_DRY_RUN в настройках.\n\n"
+                    message += "Проверь статус: /mystatus"
 
                     keyboard = [[InlineKeyboardButton("« Назад", callback_data=sign_callback_data("show_premium"))]]
                     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -455,29 +477,51 @@ async def handle_start_menu_callback(update: Update, context: ContextTypes.DEFAU
             from services.payments import create_stars_invoice, PaymentError, get_stars_pricing_info
             from services.db_service import DBService
             from services.subscription import SubscriptionService
+            from datetime import datetime
 
             user_id = query.from_user.id
 
             try:
                 # DRY RUN MODE: Simulate successful payment
                 if config.PAYMENT_DRY_RUN:
+                    logger.info(f"[DRY RUN] Processing Stars payment for user {user_id}")
+
                     # Initialize services
                     db = DBService()
                     sub_service = SubscriptionService(db)
 
                     # Grant subscription
-                    await sub_service.create_or_update_subscription(
+                    success = await sub_service.create_or_update_subscription(
                         user_id=user_id,
                         tier='pro',
                         payment_method='stars_dryrun',
-                        duration_days=30
+                        duration_days=30,
+                        transaction_id=f'dryrun_stars_{user_id}_{int(datetime.now().timestamp())}'
                     )
+
+                    if not success:
+                        logger.error(f"[DRY RUN] Failed to create subscription for user {user_id}")
+                        await query.edit_message_text(
+                            "❌ Ошибка при активации подписки (DRY RUN)\n\n"
+                            "Проверь логи в Vercel.",
+                            reply_markup=InlineKeyboardMarkup([[
+                                InlineKeyboardButton("« Назад", callback_data=sign_callback_data("buy_pro"))
+                            ]])
+                        )
+                        return
+
+                    logger.info(f"[DRY RUN] Subscription created successfully for user {user_id}")
+
+                    # Verify subscription was created
+                    subscription = await db.get_subscription(user_id)
+                    logger.info(f"[DRY RUN] Verification: subscription={subscription}")
 
                     # Show success message
                     message = "✅ Подписка активирована! (DRY RUN)\n\n"
                     message += "🎉 Теперь у тебя Pro подписка на 30 дней!\n\n"
                     message += "⚠️ Это тестовая активация.\n"
-                    message += "Для реальных платежей отключи PAYMENT_DRY_RUN в настройках."
+                    message += "Для реальных платежей отключи PAYMENT_DRY_RUN в настройках.\n\n"
+                    message += "Проверь статус: /mystatus"
 
                     keyboard = [[InlineKeyboardButton("« Назад", callback_data=sign_callback_data("show_premium"))]]
                     reply_markup = InlineKeyboardMarkup(keyboard)

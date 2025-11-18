@@ -22,10 +22,17 @@ def build_personality_menu(
     """
     Build universal personality selection menu with consistent UX.
 
+    UNIFIED BEHAVIOR ACROSS ALL COMMANDS:
+    - Base personalities: [🏭 Name] - selection only, no edit/delete
+    - Custom personalities: [🎨 Name] [✏️] [🗑️] - ALWAYS with edit/delete buttons
+    - Blocked personalities: [🔒 Name] - locked, no edit/delete
+
+    This applies to ALL contexts: /lichnost, /summary, /chat, /rassudi, direct chat.
+
     Args:
         user_id: User ID for fetching custom personalities
         callback_prefix: Prefix for callback_data (e.g., "pers:select", "summary_personality")
-        context: Menu context - "manage" (with edit/delete) or "select" (only selection)
+        context: DEPRECATED - kept for backwards compatibility, does not affect behavior
         current_personality: Name of currently selected personality (for ✓ indicator)
         extra_callback_data: Extra data to include in callback (e.g., {"chat_id": 123, "limit": "50"})
         show_create_button: Whether to show "Create personality" button
@@ -36,20 +43,16 @@ def build_personality_menu(
         InlineKeyboardMarkup with personality selection buttons
 
     Examples:
-        # For /lichnost (management context)
+        # For /lichnost
         build_personality_menu(
             user_id=123,
-            callback_prefix="pers:select",
-            context="manage",
-            current_personality="bydlan"
+            callback_prefix="pers:select"
         )
 
-        # For /summary (selection context)
+        # For /summary (now with edit/delete buttons for custom personalities!)
         build_personality_menu(
             user_id=123,
             callback_prefix="summary_personality",
-            context="select",
-            current_personality="bydlan",
             extra_callback_data={"chat_id": 456, "limit": "none"}
         )
     """
@@ -130,24 +133,20 @@ def build_personality_menu(
                     extra_callback_data
                 )
 
-            # Build row based on context
-            if context == "manage":
-                # Management context: [Select] [✏️] [🗑️]
-                # If blocked, disable edit/delete buttons
-                if p.is_blocked:
-                    keyboard.append([
-                        InlineKeyboardButton(button_text, callback_data=callback_data)
-                    ])
-                else:
-                    keyboard.append([
-                        InlineKeyboardButton(button_text, callback_data=callback_data),
-                        InlineKeyboardButton("✏️", callback_data=f"pers:edit:{p.name}"),
-                        InlineKeyboardButton("🗑️", callback_data=f"pers:delete:{p.name}")
-                    ])
-            else:
-                # Selection context: [Select only]
+            # UNIFIED BEHAVIOR: ALWAYS show edit/delete buttons for custom personalities
+            # (unless blocked - then they can't edit until they rejoin project group)
+            if p.is_blocked:
+                # Blocked: show only the locked button, no edit/delete
                 keyboard.append([
                     InlineKeyboardButton(button_text, callback_data=callback_data)
+                ])
+            else:
+                # Not blocked: ALWAYS show [Select] [✏️] [🗑️] - regardless of context
+                # This applies to /lichnost, /summary, /chat, /rassudi, direct chat - ВЕЗДЕ!
+                keyboard.append([
+                    InlineKeyboardButton(button_text, callback_data=callback_data),
+                    InlineKeyboardButton("✏️", callback_data=f"pers:edit:{p.name}"),
+                    InlineKeyboardButton("🗑️", callback_data=f"pers:delete:{p.name}")
                 ])
 
     # 5. Create button

@@ -30,7 +30,13 @@ SUPABASE_KEY = os.getenv('SUPABASE_KEY')
 # ================================================
 # SECURITY
 # ================================================
-SECRET_KEY = os.getenv('SECRET_KEY', 'default_secret_CHANGE_ME_in_production')
+SECRET_KEY = os.getenv('SECRET_KEY')
+if not SECRET_KEY:
+    raise ValueError(
+        "❌ SECRET_KEY environment variable is required!\n"
+        "Generate: python -c 'import secrets; print(secrets.token_hex(32))'\n"
+        "Set in Vercel: Settings → Environment Variables → Add SECRET_KEY"
+    )
 
 # ================================================
 # BOT SETTINGS
@@ -145,6 +151,29 @@ def validate_config():
     if not SUPABASE_KEY:
         errors.append("SUPABASE_KEY не установлен!")
 
+    # SECURITY: Check SECRET_KEY strength
+    if SECRET_KEY and len(SECRET_KEY) < 32:
+        errors.append(
+            "SECRET_KEY must be at least 32 characters long!\n"
+            "Generate: python -c 'import secrets; print(secrets.token_hex(32))'"
+        )
+
+    # Check for weak/default SECRET_KEY values
+    if SECRET_KEY:
+        forbidden_values = [
+            'your-secret-key-change-in-production',
+            'default_secret_CHANGE_ME_in_production',
+            'secret',
+            'password',
+            '12345',
+            'changeme',
+        ]
+        if SECRET_KEY.lower() in [v.lower() for v in forbidden_values]:
+            errors.append(
+                "SECRET_KEY is using a default/weak value! Generate a strong key:\n"
+                "python -c 'import secrets; print(secrets.token_hex(32))'"
+            )
+
     if errors:
         raise ValueError("\n".join(errors))
 
@@ -155,6 +184,21 @@ except ValueError as e:
     # In development, just warn. In production, this should fail hard.
     print(f"⚠️  WARNING: Configuration validation failed:\n{e}")
     print("Please set required environment variables in .env file")
+
+# ================================================
+# DEBUG SETTINGS
+# ================================================
+# SECURITY: Debug mode enables detailed logging including sensitive data
+# WARNING: NEVER enable DEBUG_MODE in production!
+DEBUG_MODE = os.getenv('DEBUG_MODE', 'false').lower() == 'true'
+
+# Environment detection
+ENV = os.getenv('ENV', 'development')  # 'production' or 'development'
+
+# Warn if DEBUG_MODE is enabled in production
+if DEBUG_MODE and ENV == 'production':
+    import logging
+    logging.warning("⚠️ DEBUG_MODE is enabled in production! Secrets may be logged!")
 
 # ================================================
 # LOGGING CONFIGURATION

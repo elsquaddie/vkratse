@@ -72,6 +72,9 @@ DIRECT_CHAT_SESSION_TIMEOUT = int(os.getenv('DIRECT_CHAT_SESSION_TIMEOUT', 900))
 # Project Telegram group ID (for group bonus)
 PROJECT_TELEGRAM_GROUP_ID = int(os.getenv('PROJECT_TELEGRAM_GROUP_ID', '0'))
 
+# Project Telegram group link/username (for invitations)
+PROJECT_GROUP_LINK = os.getenv('PROJECT_GROUP_LINK', 'https://t.me/choovakee')
+
 # Tier limits configuration
 TIER_LIMITS = {
     'free': {

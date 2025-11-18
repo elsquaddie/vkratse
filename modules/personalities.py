@@ -61,6 +61,34 @@ async def personality_command(update: Update, context: ContextTypes.DEFAULT_TYPE
     await update.message.reply_text(message_text, reply_markup=reply_markup)
 
 
+async def show_personality_menu_callback(query, user_id: int) -> None:
+    """Show personality menu in callback query"""
+    db = DBService()
+
+    # Get current personality for display only (no checkmark in menu)
+    current_personality_name = db.get_user_personality(user_id)
+    current_display = get_current_personality_display(user_id)
+
+    # Build menu using universal function (management context)
+    reply_markup = build_personality_menu(
+        user_id=user_id,
+        callback_prefix="pers:select",
+        context="manage",
+        current_personality=None,  # No checkmark - user always makes conscious choice
+        show_create_button=True
+    )
+
+    message_text = f"""🎭 Выбери личность AI
+
+Текущая: {current_display}
+
+Личность определяет стиль ответов бота на твои команды.
+
+💡 Кастомные личности можно редактировать ✏️ или удалять 🗑️"""
+
+    await query.message.edit_text(message_text, reply_markup=reply_markup)
+
+
 async def personality_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """
     Handle callback from personality buttons
@@ -135,32 +163,51 @@ async def personality_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         check = await subscription_service.can_create_custom_personality(user.id, context.bot)
 
         if not check['can_create']:
-            # Сформировать сообщение в зависимости от причины
+            # Сформировать сообщение и кнопки в зависимости от причины
             if check['reason'] == 'need_group_or_pro':
                 message = (
                     f"⚠️ Лимит кастомных личностей: {check['current']}/{check['limit']}\n\n"
                     f"Чтобы создать свою личность:\n"
                     f"• Вступи в группу проекта для получения 1 бонусного слота\n"
                     f"или\n"
-                    f"• Обновись до Pro: /premium (3 слота)"
+                    f"• Обновись до Pro (3 слота)"
                 )
+                keyboard = [
+                    [InlineKeyboardButton("👥 Вступить в группу", url=config.PROJECT_GROUP_LINK)],
+                    [InlineKeyboardButton("✅ Проверить подписку", callback_data="pers:check_group")],
+                    [InlineKeyboardButton("⭐ Обновиться до Pro", callback_data="pers:upgrade_pro")],
+                ]
+                reply_markup = InlineKeyboardMarkup(keyboard)
             elif check['reason'] == 'need_pro':
                 message = (
                     f"⚠️ Лимит кастомных личностей: {check['current']}/{check['limit']}\n\n"
-                    f"Обновись до Pro для создания еще 3 личностей: /premium"
+                    f"Обновись до Pro для создания еще 3 личностей"
                 )
+                keyboard = [
+                    [InlineKeyboardButton("⭐ Обновиться до Pro", callback_data="pers:upgrade_pro")],
+                ]
+                reply_markup = InlineKeyboardMarkup(keyboard)
             elif check['reason'] == 'need_group':
                 message = (
                     f"⚠️ Лимит кастомных личностей: {check['current']}/{check['limit']}\n\n"
                     f"Вступи в группу проекта для получения +1 слота!"
                 )
+                keyboard = [
+                    [InlineKeyboardButton("👥 Вступить в группу", url=config.PROJECT_GROUP_LINK)],
+                    [InlineKeyboardButton("✅ Проверить подписку", callback_data="pers:check_group")],
+                ]
+                reply_markup = InlineKeyboardMarkup(keyboard)
             else:  # max_reached
                 message = (
                     f"⚠️ Достигнут максимум: {check['current']}/{check['limit']}\n\n"
                     f"Удали неиспользуемые личности через /lichnost"
                 )
+                keyboard = [
+                    [InlineKeyboardButton("🎭 Перейти к личностям", callback_data="pers:menu")],
+                ]
+                reply_markup = InlineKeyboardMarkup(keyboard)
 
-            await query.message.edit_text(message)
+            await query.message.edit_text(message, reply_markup=reply_markup)
             return ConversationHandler.END
 
         # Лимит не достигнут - продолжить создание
@@ -243,6 +290,62 @@ async def personality_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         else:
             await query.answer("❌ Не удалось удалить личность", show_alert=True)
 
+        return ConversationHandler.END
+
+    # Handle check group subscription
+    elif action == "check_group":
+        subscription_service = get_subscription_service()
+        is_member = await subscription_service.check_group_membership(user.id, context.bot)
+
+        if is_member:
+            # Recheck limits
+            check = await subscription_service.can_create_custom_personality(user.id, context.bot)
+
+            if check['can_create']:
+                await query.answer(
+                    "✅ Подписка подтверждена! Теперь можешь создавать личности.",
+                    show_alert=True
+                )
+                # Show personality menu again
+                await show_personality_menu_callback(query, user.id)
+                return ConversationHandler.END
+            else:
+                await query.answer(
+                    f"✅ Подписка подтверждена!\n\n"
+                    f"Лимит: {check['current']}/{check['limit']}",
+                    show_alert=True
+                )
+        else:
+            await query.answer(
+                "⚠️ Ты не состоишь в группе проекта.\n\n"
+                "Вступи в группу и попробуй снова!",
+                show_alert=True
+            )
+
+        return ConversationHandler.END
+
+    # Handle upgrade to Pro
+    elif action == "upgrade_pro":
+        # Import premium command to avoid circular imports
+        from modules.commands import premium_command
+        # Create a fake update object with message instead of callback_query
+        # so premium_command can send a new message
+        await query.message.reply_text("Загружаю информацию о тарифах...")
+
+        # Create a modified update for premium_command
+        class FakeUpdate:
+            def __init__(self, original_update):
+                self.effective_user = original_update.effective_user
+                self.effective_chat = original_update.effective_chat
+                self.message = original_update.callback_query.message
+
+        fake_update = FakeUpdate(update)
+        await premium_command(fake_update, context)
+        return ConversationHandler.END
+
+    # Handle return to personality menu
+    elif action == "menu":
+        await show_personality_menu_callback(query, user.id)
         return ConversationHandler.END
 
     # No-op (section header)

@@ -747,6 +747,16 @@ class DBService:
 
             logger.info(f"Upsert result: {result.data if hasattr(result, 'data') else 'no data'}")
             logger.info(f"Subscription created/updated successfully for user {user_id}: {tier}, {duration_days} days")
+
+            # Unblock/block custom personalities based on new tier
+            import config
+            tier_limits = config.TIER_LIMITS.get(tier, config.TIER_LIMITS['free'])
+            max_custom_personalities = tier_limits.get('max_custom_personalities', 0)
+
+            # This will unblock personalities within the limit, block excess ones
+            await self.block_excess_custom_personalities(user_id, limit=max_custom_personalities)
+            logger.info(f"Adjusted personality blocking for user {user_id} based on tier {tier} (limit={max_custom_personalities})")
+
             return True
         except Exception as e:
             logger.error(f"Error creating/updating subscription for {user_id}: {e}", exc_info=True)
@@ -1091,7 +1101,8 @@ class DBService:
         limit: int
     ) -> bool:
         """
-        Block (deactivate) custom personalities exceeding the limit
+        Block (soft-block) custom personalities exceeding the limit
+        Uses is_blocked=True to keep personalities visible but inaccessible
 
         Args:
             user_id: Telegram user ID
@@ -1112,16 +1123,29 @@ class DBService:
 
             personalities = response.data
 
-            # If count is within limit, nothing to do
+            # If count is within limit, unblock all and return
             if len(personalities) <= limit:
+                # Unblock all custom personalities within limit
+                for p in personalities:
+                    self.client.table('personalities')\
+                        .update({'is_blocked': False})\
+                        .eq('id', p['id'])\
+                        .execute()
                 return True
 
             # Block the excess ones (keep the oldest `limit` personalities)
-            to_block = personalities[limit:]
+            # First, unblock the ones within limit
+            for p in personalities[:limit]:
+                self.client.table('personalities')\
+                    .update({'is_blocked': False})\
+                    .eq('id', p['id'])\
+                    .execute()
 
+            # Then block the excess ones
+            to_block = personalities[limit:]
             for p in to_block:
                 self.client.table('personalities')\
-                    .update({'is_active': False})\
+                    .update({'is_blocked': True})\
                     .eq('id', p['id'])\
                     .execute()
 

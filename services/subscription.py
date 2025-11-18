@@ -324,7 +324,9 @@ class SubscriptionService:
                         checked_at = checked_at.replace(tzinfo=timezone.utc)
 
                     # Cache valid for 1 hour
-                    if (datetime.now(timezone.utc) - checked_at).seconds < 3600:
+                    # FIX (ШАГ 5): Use total_seconds() instead of .seconds
+                    # .seconds only returns seconds within the minute (0-59), ignoring days/hours!
+                    if (datetime.now(timezone.utc) - checked_at).total_seconds() < 3600:
                         return cache.get('is_member', False)
 
             # Check via Telegram API

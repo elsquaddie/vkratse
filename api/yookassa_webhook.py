@@ -64,9 +64,9 @@ def verify_ip(request_ip: str) -> bool:
     return True
 
 
-def handler(request):
+async def handler(request):
     """
-    Vercel serverless function handler for YooKassa webhooks
+    Vercel serverless function handler for YooKassa webhooks (FIX ШАГ 6: Now async)
 
     Expected request body:
     {
@@ -121,9 +121,9 @@ def handler(request):
         # Get event name
         event_name = event.get('event')
 
-        # Process payment.succeeded event
+        # Process payment.succeeded event (FIX ШАГ 6: await async function)
         if event_name == 'payment.succeeded':
-            return handle_payment_succeeded(event)
+            return await handle_payment_succeeded(event)
 
         # Process payment.canceled event
         elif event_name == 'payment.canceled':

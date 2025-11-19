@@ -234,31 +234,23 @@ async def handle_start_menu_callback(update: Update, context: ContextTypes.DEFAU
             )
 
         elif action == "group_judge":
-            # Show concise instructions for /rassudi command with button that inserts command
-            from telegram import KeyboardButton, ReplyKeyboardMarkup
+            # Show instructions for /rassudi command (no ReplyKeyboard - it doesn't disappear properly)
+            text = f"""⚖️ Рассудить спор
 
-            text = f"""⚖️ Рассудить спор - бот поможет рассудить спор в выбранном стиле!
-
-Нажми кнопку ниже, чтобы начать, или введи:
+Чтобы рассудить спор, просто введи команду:
 /{config.COMMAND_JUDGE}
 
-Пример:
-/{config.COMMAND_JUDGE} Дамирка и Настька поспорили о плоской земле. Кто прав?"""
+После этого:
+1️⃣ Опиши спор в следующем сообщении
+2️⃣ Выбери личность для судейства
+3️⃣ Получи вердикт!
 
-            # ReplyKeyboard вставляет команду в поле ввода
-            keyboard = [[KeyboardButton(f"/{config.COMMAND_JUDGE}")]]
-            reply_markup = ReplyKeyboardMarkup(
-                keyboard,
-                resize_keyboard=True,  # Компактный размер
-                one_time_keyboard=True  # Исчезает после нажатия
-            )
+💡 Пример:
+/{config.COMMAND_JUDGE}
+Дамирка и Настька поспорили о плоской земле. Кто прав?"""
 
-            # Send new message with reply keyboard (can't edit inline keyboard to reply keyboard)
+            # Just show instructions - no ReplyKeyboard
             await query.edit_message_text(text)
-            await update.effective_message.reply_text(
-                "👇 Нажми кнопку чтобы начать:",
-                reply_markup=reply_markup
-            )
 
         elif action == "show_premium":
             # Show premium tiers (same logic as /premium command)

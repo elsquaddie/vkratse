@@ -233,24 +233,8 @@ async def handle_start_menu_callback(update: Update, context: ContextTypes.DEFAU
                 reply_markup=keyboard
             )
 
-        elif action == "group_judge":
-            # Show instructions for /rassudi command (no ReplyKeyboard - it doesn't disappear properly)
-            text = f"""⚖️ Рассудить спор
-
-Чтобы рассудить спор, просто введи команду:
-/{config.COMMAND_JUDGE}
-
-После этого:
-1️⃣ Опиши спор в следующем сообщении
-2️⃣ Выбери личность для судейства
-3️⃣ Получи вердикт!
-
-💡 Пример:
-/{config.COMMAND_JUDGE}
-Дамирка и Настька поспорили о плоской земле. Кто прав?"""
-
-            # Just show instructions - no ReplyKeyboard
-            await query.edit_message_text(text)
+        # NOTE: "group_judge" callback is now handled by ConversationHandler in api/index.py
+        # It directly triggers judge_command_from_button, no need to handle here
 
         elif action == "show_premium":
             # Show premium tiers (same logic as /premium command)

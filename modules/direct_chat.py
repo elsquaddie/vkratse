@@ -406,7 +406,8 @@ async def chat_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
                 context="select",
                 current_personality=None,  # No checkmark
                 show_create_button=True,  # UNIFIED: same as all other contexts
-                show_back_button=False
+                show_back_button=True,  # UNIFIED: show back button everywhere
+                back_callback="back_to_main"
             )
 
             text = (
@@ -426,7 +427,8 @@ async def chat_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             current_personality=None,  # No checkmark
             extra_callback_data={"user_id": user.id},  # Include initiator's user_id
             show_create_button=True,  # UNIFIED: allow creating personalities from any command
-            show_back_button=False
+            show_back_button=True,  # UNIFIED: show back button everywhere
+            back_callback="back_to_main"
         )
 
         # Build text

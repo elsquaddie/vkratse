@@ -32,6 +32,12 @@ async def judge_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     db = DBService()
     subscription = SubscriptionService(db)
 
+    # FIX: Clear any previous judge conversation state to ensure clean start
+    # This prevents stuck conversations from blocking new attempts
+    context.user_data.pop('judge_dispute_text', None)
+    context.user_data.pop('judge_chat_id', None)
+    logger.info(f"[JUDGE COMMAND] Cleared previous conversation state for user {user.id}")
+
     # ================================================
     # MONETIZATION: Check usage limit for judge
     # ================================================
@@ -110,6 +116,12 @@ async def judge_command_from_button(update: Update, context: ContextTypes.DEFAUL
     chat = update.effective_chat
     db = DBService()
     subscription = SubscriptionService(db)
+
+    # FIX: Clear any previous judge conversation state to ensure clean start
+    # This prevents stuck conversations from blocking new attempts
+    context.user_data.pop('judge_dispute_text', None)
+    context.user_data.pop('judge_chat_id', None)
+    logger.info(f"[JUDGE BUTTON] Cleared previous conversation state for user {user.id}")
 
     # ================================================
     # MONETIZATION: Check usage limit for judge

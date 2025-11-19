@@ -74,6 +74,7 @@ def build_personality_menu(
 
     # 2. Split into base and custom
     base_personalities = [p for p in all_personalities if not p.is_custom]
+    all_custom_personalities = [p for p in all_personalities if p.is_custom]
     custom_personalities = [
         p for p in all_personalities
         if p.is_custom and p.created_by_user_id == user_id
@@ -85,9 +86,17 @@ def build_personality_menu(
         f"callback_prefix={callback_prefix}, total_personalities={len(all_personalities)}, "
         f"base={len(base_personalities)}, custom={len(custom_personalities)}"
     )
+
+    # DEBUG: Show ALL custom personalities in DB (to see mismatch)
+    if all_custom_personalities:
+        logger.info(
+            f"[PERSONALITY MENU] ALL custom personalities in DB: "
+            f"{[(p.display_name, p.created_by_user_id, p.is_custom) for p in all_custom_personalities]}"
+        )
+
     if custom_personalities:
         logger.info(
-            f"[PERSONALITY MENU] Custom personalities: "
+            f"[PERSONALITY MENU] User's custom personalities: "
             f"{[(p.display_name, p.created_by_user_id, p.is_blocked) for p in custom_personalities]}"
         )
 

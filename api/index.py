@@ -553,8 +553,8 @@ def create_bot_application():
             )
             await query.answer("⚠️ Callback не обработан. Попробуй /start")
 
-    app.add_handler(CallbackQueryHandler(debug_unhandled_callback))
-    verbose_log("✅ Debug catch-all callback handler registered (should catch any unhandled callbacks)")
+    app.add_handler(CallbackQueryHandler(debug_unhandled_callback), group=1)
+    verbose_log("✅ Debug catch-all callback handler registered (group=1, after all other handlers)")
 
     verbose_log("✅ CHECKPOINT 8: Created new bot Application with all handlers")
     return app

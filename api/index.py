@@ -574,8 +574,8 @@ def application(environ, start_response):
         verbose_log(f"✅ CHECKPOINT 12: Request = {method} {path}")
 
         # ===== SECURITY: WEBHOOK VERIFICATION (ШАГ 4) =====
-        # Verify Telegram webhook secret to prevent fake webhooks
-        if method == 'POST':
+        # Verify Telegram webhook secret to prevent fake webhooks (if configured)
+        if method == 'POST' and config.TELEGRAM_WEBHOOK_SECRET:
             webhook_secret = environ.get('HTTP_X_TELEGRAM_BOT_API_SECRET_TOKEN')
 
             if webhook_secret != config.TELEGRAM_WEBHOOK_SECRET:

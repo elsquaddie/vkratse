@@ -50,10 +50,9 @@ async def personality_command(update: Update, context: ContextTypes.DEFAULT_TYPE
     # Save context for later restoration after edit/delete
     from utils import save_personality_menu_context
     save_personality_menu_context(
-        user_id=user.id,
         callback_prefix="pers:select",
         extra_data=None,
-        bot_data=context.bot_data
+        user_data=context.user_data
     )
 
     # Build menu using universal function (management context)
@@ -79,22 +78,23 @@ async def personality_command(update: Update, context: ContextTypes.DEFAULT_TYPE
     await update.message.reply_text(message_text, reply_markup=reply_markup)
 
 
-async def show_personality_menu_callback(query, user_id: int, bot_data: dict = None) -> None:
+async def show_personality_menu_callback(query, user_data: dict = None) -> None:
     """Show personality menu in callback query"""
     db = DBService()
+
+    user_id = query.from_user.id
 
     # Get current personality for display only (no checkmark in menu)
     current_personality_name = db.get_user_personality(user_id)
     current_display = get_current_personality_display(user_id)
 
-    # Save context for later restoration after edit/delete (if bot_data provided)
-    if bot_data is not None:
+    # Save context for later restoration after edit/delete (if user_data provided)
+    if user_data is not None:
         from utils import save_personality_menu_context
         save_personality_menu_context(
-            user_id=user_id,
             callback_prefix="pers:select",
             extra_data=None,
-            bot_data=bot_data
+            user_data=user_data
         )
 
     # Build menu using universal function (management context)
@@ -322,8 +322,35 @@ async def personality_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         )
         return AWAITING_EDIT_CHOICE
 
-    # Handle delete
+    # Handle delete - show confirmation dialog
     elif action == "delete":
+        if len(parts) < 3:
+            return ConversationHandler.END
+
+        personality_name = parts[2]
+
+        # Get personality info
+        personality = db.get_personality(personality_name)
+        if not personality:
+            await query.answer("❌ Личность не найдена", show_alert=True)
+            return ConversationHandler.END
+
+        # Show confirmation dialog
+        keyboard = [
+            [InlineKeyboardButton("✅ Да, удалить", callback_data=f"pers:delete_confirm:{personality_name}")],
+            [InlineKeyboardButton("❌ Нет, оставить", callback_data="pers:delete_cancel")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
+        await query.message.edit_text(
+            f"⚠️ Ты уверен что хочешь удалить личность '{personality.emoji} {personality.display_name}'?\n\n"
+            f"Это действие нельзя отменить.",
+            reply_markup=reply_markup
+        )
+        return ConversationHandler.END
+
+    # Handle delete confirmation - actually delete the personality
+    elif action == "delete_confirm":
         if len(parts) < 3:
             return ConversationHandler.END
 
@@ -351,12 +378,25 @@ async def personality_callback(update: Update, context: ContextTypes.DEFAULT_TYP
             from utils import restore_personality_menu_from_context
             await restore_personality_menu_from_context(
                 update=update,
-                user_id=user.id,
-                bot_data=context.bot_data,
+                user_data=context.user_data,
                 success_message=f"Личность \"{personality.display_name}\" удалена"
             )
         else:
             await query.answer("❌ Не удалось удалить личность", show_alert=True)
+
+        return ConversationHandler.END
+
+    # Handle delete cancellation - return to personality menu
+    elif action == "delete_cancel":
+        await query.answer("Отменено")
+
+        # Restore personality menu with saved context (return to where user was)
+        from utils import restore_personality_menu_from_context
+        await restore_personality_menu_from_context(
+            update=update,
+            user_data=context.user_data,
+            success_message=""
+        )
 
         return ConversationHandler.END
 
@@ -710,8 +750,7 @@ async def receive_edited_name(update: Update, context: ContextTypes.DEFAULT_TYPE
         from utils import restore_personality_menu_from_context
         await restore_personality_menu_from_context(
             update=update,
-            user_id=user.id,
-            bot_data=context.bot_data,
+            user_data=context.user_data,
             success_message=f"✅ Название изменено на: {new_name.capitalize()}"
         )
     else:
@@ -752,8 +791,7 @@ async def receive_edited_emoji(update: Update, context: ContextTypes.DEFAULT_TYP
         from utils import restore_personality_menu_from_context
         await restore_personality_menu_from_context(
             update=update,
-            user_id=user.id,
-            bot_data=context.bot_data,
+            user_data=context.user_data,
             success_message=f"✅ Эмодзи изменён на: {new_emoji}"
         )
     else:
@@ -796,8 +834,7 @@ async def receive_edited_description(update: Update, context: ContextTypes.DEFAU
         from utils import restore_personality_menu_from_context
         await restore_personality_menu_from_context(
             update=update,
-            user_id=user.id,
-            bot_data=context.bot_data,
+            user_data=context.user_data,
             success_message="✅ Описание обновлено!"
         )
     else:

@@ -381,7 +381,8 @@ def create_bot_application():
             CommandHandler("cancel", cancel_judge, filters=filters.ChatType.GROUPS)
         ],
         name="judge_conversation",
-        persistent=True  # Enable persistence for serverless environment
+        persistent=True,  # Enable persistence for serverless environment
+        per_message=False  # FIX: Suppress warning about per_message tracking
     )
     app.add_handler(judge_conv)
     verbose_log("✅ Judge ConversationHandler registered")
@@ -460,16 +461,17 @@ def create_bot_application():
             CommandHandler("cancel", cancel_personality_creation)
         ],
         name="personality_conversation",
-        persistent=True  # FIX: Enable persistence for serverless environment
+        persistent=True,  # Enable persistence for serverless environment
+        per_message=False  # FIX: Suppress warning about per_message tracking
     )
     app.add_handler(personality_conv)
 
     # Direct chat handlers (Phase 2)
     # Handle /start menu callbacks (including payment callbacks)
-    # NOTE: "group_judge" also handled here as fallback (in case ConversationHandler doesn't catch it)
+    # NOTE: "group_judge" removed - now handled exclusively by ConversationHandler
     app.add_handler(CallbackQueryHandler(
         handle_start_menu_callback,
-        pattern="^(direct_chat|setup_personality|dm_summary|group_summary|group_judge|back_to_main|show_premium|buy_pro|buy_pro_card|buy_pro_stars|buy_pro_tribute|cancel_subscription|confirm_cancel_subscription):"
+        pattern="^(direct_chat|setup_personality|dm_summary|group_summary|back_to_main|show_premium|buy_pro|buy_pro_card|buy_pro_stars|buy_pro_tribute|cancel_subscription|confirm_cancel_subscription):"
     ))
 
     # Handle personality selection callbacks

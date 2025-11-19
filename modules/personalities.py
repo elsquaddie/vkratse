@@ -47,6 +47,15 @@ async def personality_command(update: Update, context: ContextTypes.DEFAULT_TYPE
     current_personality_name = db.get_user_personality(user.id)
     current_display = get_current_personality_display(user.id)
 
+    # Save context for later restoration after edit/delete
+    from utils import save_personality_menu_context
+    save_personality_menu_context(
+        user_id=user.id,
+        callback_prefix="pers:select",
+        extra_data=None,
+        bot_data=context.bot_data
+    )
+
     # Build menu using universal function (management context)
     # NOTE: current_personality=None to avoid checkmark (по философии: нет дефолтной личности)
     reply_markup = build_personality_menu(
@@ -70,13 +79,23 @@ async def personality_command(update: Update, context: ContextTypes.DEFAULT_TYPE
     await update.message.reply_text(message_text, reply_markup=reply_markup)
 
 
-async def show_personality_menu_callback(query, user_id: int) -> None:
+async def show_personality_menu_callback(query, user_id: int, bot_data: dict = None) -> None:
     """Show personality menu in callback query"""
     db = DBService()
 
     # Get current personality for display only (no checkmark in menu)
     current_personality_name = db.get_user_personality(user_id)
     current_display = get_current_personality_display(user_id)
+
+    # Save context for later restoration after edit/delete (if bot_data provided)
+    if bot_data is not None:
+        from utils import save_personality_menu_context
+        save_personality_menu_context(
+            user_id=user_id,
+            callback_prefix="pers:select",
+            extra_data=None,
+            bot_data=bot_data
+        )
 
     # Build menu using universal function (management context)
     reply_markup = build_personality_menu(
@@ -325,11 +344,17 @@ async def personality_callback(update: Update, context: ContextTypes.DEFAULT_TYP
             if current_personality == personality_name:
                 db.update_user_personality(user.id, config.DEFAULT_PERSONALITY, user.username)
 
-            # Show success message and return to personality menu
+            # Show success message
             await query.answer(f"✅ Личность \"{personality.display_name}\" удалена", show_alert=True)
 
-            # Show personality menu again (unified behavior)
-            await show_personality_menu_callback(query, user.id)
+            # Restore personality menu with saved context (returns to original menu)
+            from utils import restore_personality_menu_from_context
+            await restore_personality_menu_from_context(
+                update=update,
+                user_id=user.id,
+                bot_data=context.bot_data,
+                success_message=f"Личность \"{personality.display_name}\" удалена"
+            )
         else:
             await query.answer("❌ Не удалось удалить личность", show_alert=True)
 
@@ -407,7 +432,7 @@ async def personality_callback(update: Update, context: ContextTypes.DEFAULT_TYP
 
     # Handle return to personality menu
     elif action == "menu":
-        await show_personality_menu_callback(query, user.id)
+        await show_personality_menu_callback(query, user.id, context.bot_data)
         return ConversationHandler.END
 
     # No-op (section header)
@@ -681,14 +706,13 @@ async def receive_edited_name(update: Update, context: ContextTypes.DEFAULT_TYPE
     )
 
     if success:
-        # Show success with back button
-        from utils.security import sign_callback_data
-        keyboard = [[InlineKeyboardButton("◀️ Назад к личностям", callback_data=sign_callback_data("pers:menu"))]]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-
-        await update.message.reply_text(
-            f"✅ Название изменено на: {new_name.capitalize()}",
-            reply_markup=reply_markup
+        # Restore personality menu with saved context (returns to original menu)
+        from utils import restore_personality_menu_from_context
+        await restore_personality_menu_from_context(
+            update=update,
+            user_id=user.id,
+            bot_data=context.bot_data,
+            success_message=f"✅ Название изменено на: {new_name.capitalize()}"
         )
     else:
         await update.message.reply_text("❌ Ошибка при обновлении. Попробуй позже.")
@@ -724,14 +748,13 @@ async def receive_edited_emoji(update: Update, context: ContextTypes.DEFAULT_TYP
     )
 
     if success:
-        # Show success with back button
-        from utils.security import sign_callback_data
-        keyboard = [[InlineKeyboardButton("◀️ Назад к личностям", callback_data=sign_callback_data("pers:menu"))]]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-
-        await update.message.reply_text(
-            f"✅ Эмодзи изменён на: {new_emoji}",
-            reply_markup=reply_markup
+        # Restore personality menu with saved context (returns to original menu)
+        from utils import restore_personality_menu_from_context
+        await restore_personality_menu_from_context(
+            update=update,
+            user_id=user.id,
+            bot_data=context.bot_data,
+            success_message=f"✅ Эмодзи изменён на: {new_emoji}"
         )
     else:
         await update.message.reply_text("❌ Ошибка при обновлении. Попробуй позже.")
@@ -769,14 +792,13 @@ async def receive_edited_description(update: Update, context: ContextTypes.DEFAU
     )
 
     if success:
-        # Show success with back button
-        from utils.security import sign_callback_data
-        keyboard = [[InlineKeyboardButton("◀️ Назад к личностям", callback_data=sign_callback_data("pers:menu"))]]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-
-        await update.message.reply_text(
-            f"✅ Описание обновлено!",
-            reply_markup=reply_markup
+        # Restore personality menu with saved context (returns to original menu)
+        from utils import restore_personality_menu_from_context
+        await restore_personality_menu_from_context(
+            update=update,
+            user_id=user.id,
+            bot_data=context.bot_data,
+            success_message="✅ Описание обновлено!"
         )
     else:
         await update.message.reply_text("❌ Ошибка при обновлении. Попробуй позже.")

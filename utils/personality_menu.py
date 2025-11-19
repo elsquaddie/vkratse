@@ -7,6 +7,125 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from typing import Optional, Dict, Any
 from services import DBService
 from utils import create_string_signature
+from datetime import datetime
+
+
+def save_personality_menu_context(
+    user_id: int,
+    callback_prefix: str,
+    extra_data: Optional[Dict[str, Any]],
+    bot_data: Dict
+) -> None:
+    """
+    Save personality menu context for later restoration after edit/delete.
+
+    This allows users to edit/delete personalities from any context (e.g., /chat, /summary)
+    and return to the exact same menu they were in.
+
+    Args:
+        user_id: User ID
+        callback_prefix: Callback prefix (e.g., "summary_personality", "start_chat")
+        extra_data: Extra callback data (e.g., {"chat_id": 123})
+        bot_data: Bot data dict for persistence
+    """
+    if 'personality_menu_contexts' not in bot_data:
+        bot_data['personality_menu_contexts'] = {}
+
+    bot_data['personality_menu_contexts'][user_id] = {
+        'callback_prefix': callback_prefix,
+        'extra_data': extra_data or {},
+        'updated_at': datetime.now()
+    }
+
+
+def get_personality_menu_context(user_id: int, bot_data: Dict) -> Optional[Dict[str, Any]]:
+    """
+    Get saved personality menu context for user.
+
+    Args:
+        user_id: User ID
+        bot_data: Bot data dict
+
+    Returns:
+        Saved context dict or None
+    """
+    contexts = bot_data.get('personality_menu_contexts', {})
+    return contexts.get(user_id)
+
+
+async def restore_personality_menu_from_context(
+    update,
+    user_id: int,
+    bot_data: Dict,
+    success_message: str
+) -> None:
+    """
+    Restore personality menu with saved context after edit/delete operation.
+
+    This allows users to return to the exact same menu they were in before editing.
+    For example, if user was selecting personality for /chat and edited a personality,
+    they will return to /chat personality selection (not /lichnost).
+
+    Args:
+        update: Telegram update object (can be Message or CallbackQuery)
+        user_id: User ID
+        bot_data: Bot data dict
+        success_message: Success message to show
+    """
+    from config import logger
+
+    # Get saved context
+    saved_context = get_personality_menu_context(user_id, bot_data)
+
+    if not saved_context:
+        # Fallback to /lichnost menu if no context saved
+        logger.warning(f"[RESTORE MENU] No saved context for user {user_id}, falling back to /lichnost")
+
+        # Create a fake query object for show_personality_menu_callback
+        class FakeQuery:
+            def __init__(self, message):
+                self.message = message
+
+        fake_query = FakeQuery(update.effective_message)
+
+        from modules.personalities import show_personality_menu_callback
+        await update.effective_message.reply_text(success_message)
+        await show_personality_menu_callback(fake_query, user_id, bot_data)
+        return
+
+    callback_prefix = saved_context['callback_prefix']
+    extra_data = saved_context.get('extra_data', {})
+
+    logger.info(f"[RESTORE MENU] Restoring menu for user {user_id} with prefix='{callback_prefix}'")
+
+    # Rebuild menu with saved context
+    reply_markup = build_personality_menu(
+        user_id=user_id,
+        callback_prefix=callback_prefix,
+        context="select",
+        current_personality=None,
+        extra_callback_data=extra_data,
+        show_create_button=True,
+        show_back_button=True,
+        back_callback="back_to_main"
+    )
+
+    # Determine appropriate message based on context
+    if callback_prefix == "sel_pers":
+        text = f"{success_message}\n\n🎭 Выбери личность для общения:"
+    elif callback_prefix == "start_chat":
+        text = f"{success_message}\n\n🎭 Выбери личность для общения в группе:"
+    elif callback_prefix == "summary_personality":
+        text = f"{success_message}\n\n🎭 Выбери личность для саммари:"
+    elif callback_prefix == "judge_personality":
+        text = f"{success_message}\n\n⚖️ Выбери стиль судейства:"
+    elif callback_prefix == "dm_summary_personality":
+        text = f"{success_message}\n\n🎭 Выбери личность для саммари:"
+    else:
+        # Fallback for pers:select (/lichnost)
+        text = f"{success_message}\n\n🎭 Выбери личность AI:"
+
+    await update.effective_message.reply_text(text, reply_markup=reply_markup)
 
 
 def build_personality_menu(

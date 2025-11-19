@@ -39,9 +39,17 @@ async def show_personality_selection(
         show_back_button: If True, show back button to main menu
     """
     try:
-        from utils import build_personality_menu
+        from utils import build_personality_menu, save_personality_menu_context
 
         user_id = update.effective_user.id
+
+        # Save context for later restoration after edit/delete
+        save_personality_menu_context(
+            user_id=user_id,
+            callback_prefix="sel_pers",
+            extra_data=None,
+            bot_data=context.bot_data
+        )
 
         # Build menu using universal function
         reply_markup = build_personality_menu(
@@ -396,10 +404,18 @@ async def chat_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     chat = update.effective_chat
 
     try:
-        from utils import build_personality_menu
+        from utils import build_personality_menu, save_personality_menu_context
 
         # In DM: show unified personality selection menu
         if chat.type == ChatType.PRIVATE:
+            # Save context for later restoration after edit/delete
+            save_personality_menu_context(
+                user_id=user.id,
+                callback_prefix="sel_pers",
+                extra_data=None,
+                bot_data=context.bot_data
+            )
+
             reply_markup = build_personality_menu(
                 user_id=user.id,
                 callback_prefix="sel_pers",
@@ -420,6 +436,14 @@ async def chat_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             return
 
         # In groups: show unified personality selection menu for session
+        # Save context for later restoration after edit/delete
+        save_personality_menu_context(
+            user_id=user.id,
+            callback_prefix="start_chat",
+            extra_data={"user_id": user.id},
+            bot_data=context.bot_data
+        )
+
         reply_markup = build_personality_menu(
             user_id=user.id,
             callback_prefix="start_chat",

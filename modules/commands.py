@@ -239,8 +239,16 @@ async def handle_start_menu_callback(update: Update, context: ContextTypes.DEFAU
                 reply_markup=keyboard
             )
 
-        # NOTE: "group_judge" callback is now handled by ConversationHandler in api/index.py
-        # It directly triggers judge_command_from_button, no need to handle here
+        elif action == "group_judge":
+            # Call judge_command_from_button directly
+            # Note: This is a workaround because ConversationHandler entry_points don't work
+            # reliably when persistent=True and state is stuck in DB
+            from modules.judge import judge_command_from_button
+
+            logger.info(f"[HANDLE START MENU] Calling judge_command_from_button for group_judge callback")
+            await judge_command_from_button(update, context)
+            # Note: judge_command_from_button returns ConversationHandler state,
+            # but we don't need to handle it here - ConversationHandler will pick it up
 
         elif action == "show_premium":
             # Show premium tiers (same logic as /premium command)

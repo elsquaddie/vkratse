@@ -367,11 +367,10 @@ def create_bot_application():
     app.add_handler(CommandHandler(config.COMMAND_STOP, stop_command))
 
     # Judge command with ConversationHandler (groups only)
-    # NOTE: Pattern matches "group_judge:<signature>" from sign_callback_data("group_judge")
     judge_conv = ConversationHandler(
         entry_points=[
             CommandHandler(config.COMMAND_JUDGE, judge_command, filters=filters.ChatType.GROUPS),
-            CallbackQueryHandler(judge_command_from_button, pattern=r"^group_judge:")  # Button trigger
+            CallbackQueryHandler(judge_command_from_button, pattern=r"^group_judge:")
         ],
         states={
             AWAITING_DISPUTE_DESCRIPTION: [
@@ -385,7 +384,7 @@ def create_bot_application():
         persistent=True  # Enable persistence for serverless environment
     )
     app.add_handler(judge_conv)
-    verbose_log("✅ Judge ConversationHandler registered with pattern: ^group_judge:")
+    verbose_log("✅ Judge ConversationHandler registered")
 
     # Judge personality selection callback (outside ConversationHandler)
     app.add_handler(CallbackQueryHandler(
@@ -436,10 +435,10 @@ def create_bot_application():
 
     # Direct chat handlers (Phase 2)
     # Handle /start menu callbacks (including payment callbacks)
-    # NOTE: "group_judge" is handled by judge_conv ConversationHandler above
+    # NOTE: "group_judge" also handled here as fallback (in case ConversationHandler doesn't catch it)
     app.add_handler(CallbackQueryHandler(
         handle_start_menu_callback,
-        pattern="^(direct_chat|setup_personality|dm_summary|group_summary|back_to_main|show_premium|buy_pro|buy_pro_card|buy_pro_stars|buy_pro_tribute|cancel_subscription|confirm_cancel_subscription):"
+        pattern="^(direct_chat|setup_personality|dm_summary|group_summary|group_judge|back_to_main|show_premium|buy_pro|buy_pro_card|buy_pro_stars|buy_pro_tribute|cancel_subscription|confirm_cancel_subscription):"
     ))
 
     # Handle personality selection callbacks

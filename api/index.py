@@ -382,8 +382,7 @@ def create_bot_application():
             CommandHandler("cancel", cancel_judge, filters=filters.ChatType.GROUPS)
         ],
         name="judge_conversation",
-        persistent=True,  # Enable persistence for serverless environment
-        per_message=True  # Required for CallbackQueryHandler in entry_points
+        persistent=True  # Enable persistence for serverless environment
     )
     app.add_handler(judge_conv)
     verbose_log("✅ Judge ConversationHandler registered")
@@ -462,8 +461,7 @@ def create_bot_application():
             CommandHandler("cancel", cancel_personality_creation)
         ],
         name="personality_conversation",
-        persistent=True,  # Enable persistence for serverless environment
-        per_message=True  # Required for CallbackQueryHandler in entry_points and states
+        persistent=True  # Enable persistence for serverless environment
     )
     app.add_handler(personality_conv)
 

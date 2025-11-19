@@ -17,18 +17,17 @@ def build_personality_menu(
     extra_callback_data: Optional[Dict[str, Any]] = None,
     show_create_button: bool = True,
     show_back_button: bool = False,
-    back_callback: str = "back_to_main",
-    show_edit_buttons: bool = False
+    back_callback: str = "back_to_main"
 ) -> InlineKeyboardMarkup:
     """
     Build universal personality selection menu with consistent UX.
 
     UNIFIED BEHAVIOR ACROSS ALL COMMANDS:
     - Base personalities: [🏭 Name] - selection only, no edit/delete
-    - Custom personalities:
-      - WITH edit buttons (show_edit_buttons=True): [🎨 Name] [✏️] [🗑️]
-      - WITHOUT edit buttons (show_edit_buttons=False): [🎨 Name]
+    - Custom personalities: [🎨 Name] [✏️] [🗑️] - ALWAYS with edit/delete buttons
     - Blocked personalities: [🔒 Name] - locked, no edit/delete
+
+    This applies to ALL contexts: /lichnost, /summary, /chat, /rassudi, direct chat.
 
     Args:
         user_id: User ID for fetching custom personalities
@@ -39,25 +38,22 @@ def build_personality_menu(
         show_create_button: Whether to show "Create personality" button
         show_back_button: Whether to show "Back" button
         back_callback: Callback data for back button (default: "back_to_main")
-        show_edit_buttons: Whether to show edit/delete buttons for custom personalities (default: False)
 
     Returns:
         InlineKeyboardMarkup with personality selection buttons
 
     Examples:
-        # For /lichnost (with edit/delete buttons)
+        # For /lichnost
         build_personality_menu(
             user_id=123,
-            callback_prefix="pers:select",
-            show_edit_buttons=True
+            callback_prefix="pers:select"
         )
 
-        # For /summary (without edit/delete buttons)
+        # For /summary (now with edit/delete buttons for custom personalities!)
         build_personality_menu(
             user_id=123,
             callback_prefix="summary_personality",
-            extra_callback_data={"chat_id": 456, "limit": "none"},
-            show_edit_buttons=False
+            extra_callback_data={"chat_id": 456, "limit": "none"}
         )
     """
     from utils.security import sign_callback_data
@@ -160,26 +156,20 @@ def build_personality_menu(
                     extra_callback_data
                 )
 
-            # Show edit/delete buttons ONLY if show_edit_buttons=True (e.g., in /lichnost)
-            # For other commands (summary, chat, judge), show ONLY selection button
+            # UNIFIED BEHAVIOR: ALWAYS show edit/delete buttons for custom personalities
+            # (unless blocked - then they can't edit until they rejoin project group)
             if p.is_blocked:
                 # Blocked: show only the locked button, no edit/delete
                 keyboard.append([
                     InlineKeyboardButton(button_text, callback_data=callback_data)
                 ])
-            elif show_edit_buttons:
-                # Not blocked + edit mode: show [Select] [✏️] [🗑️]
-                # This applies ONLY to /lichnost where user explicitly manages personalities
+            else:
+                # Not blocked: ALWAYS show [Select] [✏️] [🗑️] - regardless of context
+                # This applies to /lichnost, /summary, /chat, /rassudi, direct chat - ВЕЗДЕ!
                 keyboard.append([
                     InlineKeyboardButton(button_text, callback_data=callback_data),
                     InlineKeyboardButton("✏️", callback_data=f"pers:edit:{p.name}"),
                     InlineKeyboardButton("🗑️", callback_data=f"pers:delete:{p.name}")
-                ])
-            else:
-                # Not blocked + selection mode: show ONLY [Select] button
-                # This applies to /summary, /chat, /rassudi, direct chat
-                keyboard.append([
-                    InlineKeyboardButton(button_text, callback_data=callback_data)
                 ])
 
     # 5. Create button

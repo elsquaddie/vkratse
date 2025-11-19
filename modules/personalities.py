@@ -56,8 +56,7 @@ async def personality_command(update: Update, context: ContextTypes.DEFAULT_TYPE
         current_personality=None,  # No checkmark - user always makes conscious choice
         show_create_button=True,
         show_back_button=True,  # UNIFIED: show back button everywhere
-        back_callback="back_to_main",
-        show_edit_buttons=True  # ONLY /lichnost shows edit/delete buttons
+        back_callback="back_to_main"
     )
 
     message_text = f"""🎭 Выбери личность AI
@@ -87,8 +86,7 @@ async def show_personality_menu_callback(query, user_id: int) -> None:
         current_personality=None,  # No checkmark - user always makes conscious choice
         show_create_button=True,
         show_back_button=True,  # UNIFIED: show back button everywhere
-        back_callback="back_to_main",
-        show_edit_buttons=True  # ONLY /lichnost shows edit/delete buttons
+        back_callback="back_to_main"
     )
 
     message_text = f"""🎭 Выбери личность AI
@@ -356,8 +354,7 @@ async def personality_callback(update: Update, context: ContextTypes.DEFAULT_TYP
                 current_personality=None,
                 show_create_button=True,
                 show_back_button=True,  # UNIFIED: show back button everywhere
-                back_callback="back_to_main",
-                show_edit_buttons=True  # ONLY /lichnost shows edit/delete buttons
+                back_callback="back_to_main"
             )
 
             await query.message.edit_text(

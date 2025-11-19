@@ -91,12 +91,20 @@ async def judge_command_from_button(update: Update, context: ContextTypes.DEFAUL
     from utils.security import verify_callback_data
 
     query = update.callback_query
+
+    # LOG: Debug callback data
+    logger.info(f"[JUDGE BUTTON] Callback received: {query.data}")
+    logger.info(f"[JUDGE BUTTON] User: {query.from_user.id}, Chat: {update.effective_chat.id}")
+
     await query.answer()
 
     # Verify HMAC signature
     if not verify_callback_data(query.data):
+        logger.error(f"[JUDGE BUTTON] HMAC verification FAILED for: {query.data}")
         await query.edit_message_text("❌ Неверная подпись данных. Попробуй /start")
         return ConversationHandler.END
+
+    logger.info(f"[JUDGE BUTTON] HMAC verification SUCCESS")
 
     user = query.from_user
     chat = update.effective_chat

@@ -367,10 +367,11 @@ def create_bot_application():
     app.add_handler(CommandHandler(config.COMMAND_STOP, stop_command))
 
     # Judge command with ConversationHandler (groups only)
+    # NOTE: Pattern matches "group_judge:<signature>" from sign_callback_data("group_judge")
     judge_conv = ConversationHandler(
         entry_points=[
             CommandHandler(config.COMMAND_JUDGE, judge_command, filters=filters.ChatType.GROUPS),
-            CallbackQueryHandler(judge_command_from_button, pattern="^group_judge:")  # Button trigger
+            CallbackQueryHandler(judge_command_from_button, pattern=r"^group_judge:")  # Button trigger
         ],
         states={
             AWAITING_DISPUTE_DESCRIPTION: [
@@ -384,6 +385,7 @@ def create_bot_application():
         persistent=True  # Enable persistence for serverless environment
     )
     app.add_handler(judge_conv)
+    verbose_log("✅ Judge ConversationHandler registered with pattern: ^group_judge:")
 
     # Judge personality selection callback (outside ConversationHandler)
     app.add_handler(CallbackQueryHandler(
@@ -506,6 +508,22 @@ def create_bot_application():
         filters.SUCCESSFUL_PAYMENT,
         handle_successful_payment
     ))
+
+    # ================================================
+    # DEBUG: Catch-all callback handler (should be LAST)
+    # ================================================
+    async def debug_unhandled_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Log any callbacks that weren't handled by other handlers"""
+        query = update.callback_query
+        if query:
+            logger.warning(
+                f"[DEBUG] UNHANDLED CALLBACK: data='{query.data}', "
+                f"user={query.from_user.id}, chat={update.effective_chat.id}"
+            )
+            await query.answer("⚠️ Callback не обработан. Попробуй /start")
+
+    app.add_handler(CallbackQueryHandler(debug_unhandled_callback))
+    verbose_log("✅ Debug catch-all callback handler registered (should catch any unhandled callbacks)")
 
     verbose_log("✅ CHECKPOINT 8: Created new bot Application with all handlers")
     return app

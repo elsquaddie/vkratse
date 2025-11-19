@@ -42,10 +42,13 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         ]
     else:
         # Group chat: 4 buttons
+        judge_callback = sign_callback_data("group_judge")
+        logger.info(f"[START COMMAND] Creating group menu with judge callback: {judge_callback}")
+
         keyboard = [
             [InlineKeyboardButton("📝 Сделать саммари", callback_data=sign_callback_data("group_summary"))],
             [InlineKeyboardButton("💬 Общаться напрямую", callback_data=sign_callback_data("direct_chat"))],
-            [InlineKeyboardButton("⚖️ Рассудить", callback_data=sign_callback_data("group_judge"))],
+            [InlineKeyboardButton("⚖️ Рассудить", callback_data=judge_callback)],
             [InlineKeyboardButton("🎭 Настроить личность", callback_data=sign_callback_data("setup_personality"))]
         ]
 
@@ -88,10 +91,13 @@ async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, edi
         ]
     else:
         # Group chat: 4 buttons
+        judge_callback = sign_callback_data("group_judge")
+        logger.info(f"[SHOW MAIN MENU] Creating group menu with judge callback: {judge_callback}")
+
         keyboard = [
             [InlineKeyboardButton("📝 Сделать саммари", callback_data=sign_callback_data("group_summary"))],
             [InlineKeyboardButton("💬 Общаться напрямую", callback_data=sign_callback_data("direct_chat"))],
-            [InlineKeyboardButton("⚖️ Рассудить", callback_data=sign_callback_data("group_judge"))],
+            [InlineKeyboardButton("⚖️ Рассудить", callback_data=judge_callback)],
             [InlineKeyboardButton("🎭 Настроить личность", callback_data=sign_callback_data("setup_personality"))]
         ]
 

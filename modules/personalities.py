@@ -103,16 +103,15 @@ async def personality_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     user = query.from_user
     db = DBService()
 
-    await query.answer()
-
     # Parse callback data
     parts = query.data.split(':')
     if len(parts) < 2:
+        await query.answer()
         return ConversationHandler.END
 
     action = parts[1]
 
-    # Handle blocked personality
+    # Handle blocked personality - IMPORTANT: answer with alert BEFORE returning
     if action == "blocked":
         await query.answer(
             "🔒 Эта личность заблокирована\n\n"
@@ -123,6 +122,9 @@ async def personality_callback(update: Update, context: ContextTypes.DEFAULT_TYP
             show_alert=True
         )
         return ConversationHandler.END
+
+    # For all other actions, answer callback without alert
+    await query.answer()
 
     # Handle selection
     if action == "select":
@@ -302,12 +304,17 @@ async def personality_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         is_member = await subscription_service.is_in_project_group(user.id, context.bot, force_check=True)
 
         if is_member:
+            # IMPORTANT: Unblock group bonus personalities if member
+            await db.unblock_group_bonus_personalities(user.id)
+            logger.info(f"Unblocked group bonus personalities for user {user.id} via check_group")
+
             # Recheck limits
             check = await subscription_service.can_create_custom_personality(user.id, context.bot)
 
             if check['can_create']:
                 await query.answer(
-                    "✅ Подписка подтверждена! Теперь можешь создавать личности.",
+                    "✅ Подписка подтверждена! Личности разблокированы.\n\n"
+                    "Теперь можешь создавать новые личности.",
                     show_alert=True
                 )
                 # Show personality menu again
@@ -315,10 +322,12 @@ async def personality_callback(update: Update, context: ContextTypes.DEFAULT_TYP
                 return ConversationHandler.END
             else:
                 await query.answer(
-                    f"✅ Подписка подтверждена!\n\n"
+                    f"✅ Подписка подтверждена! Личности разблокированы.\n\n"
                     f"Лимит: {check['current']}/{check['limit']}",
                     show_alert=True
                 )
+                # Refresh menu to show unblocked personalities
+                await show_personality_menu_callback(query, user.id)
         else:
             await query.answer(
                 "⚠️ Ты не состоишь в группе проекта.\n\n"

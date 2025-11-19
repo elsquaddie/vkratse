@@ -325,10 +325,11 @@ async def personality_callback(update: Update, context: ContextTypes.DEFAULT_TYP
             if current_personality == personality_name:
                 db.update_user_personality(user.id, config.DEFAULT_PERSONALITY, user.username)
 
-            await query.message.edit_text(
-                f"✅ Личность \"{personality.display_name}\" удалена.\n\n"
-                f"Используй /{config.COMMAND_PERSONALITY} чтобы выбрать другую."
-            )
+            # Show success message and return to personality menu
+            await query.answer(f"✅ Личность \"{personality.display_name}\" удалена", show_alert=True)
+
+            # Show personality menu again (unified behavior)
+            await show_personality_menu_callback(query, user.id)
         else:
             await query.answer("❌ Не удалось удалить личность", show_alert=True)
 
@@ -680,9 +681,14 @@ async def receive_edited_name(update: Update, context: ContextTypes.DEFAULT_TYPE
     )
 
     if success:
+        # Show success with back button
+        from utils.security import sign_callback_data
+        keyboard = [[InlineKeyboardButton("◀️ Назад к личностям", callback_data=sign_callback_data("pers:menu"))]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
         await update.message.reply_text(
-            f"✅ Название изменено на: {new_name.capitalize()}\n\n"
-            f"Используй /{config.COMMAND_PERSONALITY} для дальнейшего управления."
+            f"✅ Название изменено на: {new_name.capitalize()}",
+            reply_markup=reply_markup
         )
     else:
         await update.message.reply_text("❌ Ошибка при обновлении. Попробуй позже.")
@@ -718,9 +724,14 @@ async def receive_edited_emoji(update: Update, context: ContextTypes.DEFAULT_TYP
     )
 
     if success:
+        # Show success with back button
+        from utils.security import sign_callback_data
+        keyboard = [[InlineKeyboardButton("◀️ Назад к личностям", callback_data=sign_callback_data("pers:menu"))]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
         await update.message.reply_text(
-            f"✅ Эмодзи изменён на: {new_emoji}\n\n"
-            f"Используй /{config.COMMAND_PERSONALITY} для дальнейшего управления."
+            f"✅ Эмодзи изменён на: {new_emoji}",
+            reply_markup=reply_markup
         )
     else:
         await update.message.reply_text("❌ Ошибка при обновлении. Попробуй позже.")
@@ -758,9 +769,14 @@ async def receive_edited_description(update: Update, context: ContextTypes.DEFAU
     )
 
     if success:
+        # Show success with back button
+        from utils.security import sign_callback_data
+        keyboard = [[InlineKeyboardButton("◀️ Назад к личностям", callback_data=sign_callback_data("pers:menu"))]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
         await update.message.reply_text(
-            f"✅ Описание обновлено!\n\n"
-            f"Используй /{config.COMMAND_PERSONALITY} для дальнейшего управления."
+            f"✅ Описание обновлено!",
+            reply_markup=reply_markup
         )
     else:
         await update.message.reply_text("❌ Ошибка при обновлении. Попробуй позже.")

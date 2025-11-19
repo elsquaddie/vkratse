@@ -155,6 +155,8 @@ async def _summary_in_group(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     # 4. Show personality selection menu using universal builder
     # Note: We don't pass current_personality to avoid confusing checkmark
     # in summary context (user's default personality is for direct chat)
+    logger.info(f"[SUMMARY] Showing personality menu for user {user.id} in chat {chat.id}")
+
     keyboard = build_personality_menu(
         user_id=user.id,
         callback_prefix="summary_personality",
@@ -165,6 +167,8 @@ async def _summary_in_group(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         show_back_button=True,  # UNIFIED: show back button everywhere
         back_callback="back_to_main"
     )
+
+    logger.info(f"[SUMMARY] Personality menu built successfully, sending to user {user.id}")
 
     await update.message.reply_text(
         "🎭 Выбери личность для саммари:",

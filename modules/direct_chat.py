@@ -45,10 +45,9 @@ async def show_personality_selection(
 
         # Save context for later restoration after edit/delete
         save_personality_menu_context(
-            user_id=user_id,
             callback_prefix="sel_pers",
             extra_data=None,
-            bot_data=context.bot_data
+            user_data=context.user_data
         )
 
         # Build menu using universal function
@@ -410,10 +409,9 @@ async def chat_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         if chat.type == ChatType.PRIVATE:
             # Save context for later restoration after edit/delete
             save_personality_menu_context(
-                user_id=user.id,
                 callback_prefix="sel_pers",
                 extra_data=None,
-                bot_data=context.bot_data
+                user_data=context.user_data
             )
 
             reply_markup = build_personality_menu(
@@ -438,10 +436,9 @@ async def chat_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         # In groups: show unified personality selection menu for session
         # Save context for later restoration after edit/delete
         save_personality_menu_context(
-            user_id=user.id,
             callback_prefix="start_chat",
             extra_data={"user_id": user.id},
-            bot_data=context.bot_data
+            user_data=context.user_data
         )
 
         reply_markup = build_personality_menu(

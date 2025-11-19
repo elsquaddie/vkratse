@@ -11,10 +11,9 @@ from datetime import datetime
 
 
 def save_personality_menu_context(
-    user_id: int,
     callback_prefix: str,
     extra_data: Optional[Dict[str, Any]],
-    bot_data: Dict
+    user_data: Dict
 ) -> None:
     """
     Save personality menu context for later restoration after edit/delete.
@@ -23,40 +22,33 @@ def save_personality_menu_context(
     and return to the exact same menu they were in.
 
     Args:
-        user_id: User ID
         callback_prefix: Callback prefix (e.g., "summary_personality", "start_chat")
         extra_data: Extra callback data (e.g., {"chat_id": 123})
-        bot_data: Bot data dict for persistence
+        user_data: User data dict for persistence (PERSISTED to DB!)
     """
-    if 'personality_menu_contexts' not in bot_data:
-        bot_data['personality_menu_contexts'] = {}
-
-    bot_data['personality_menu_contexts'][user_id] = {
+    user_data['personality_menu_context'] = {
         'callback_prefix': callback_prefix,
         'extra_data': extra_data or {},
         'updated_at': datetime.now()
     }
 
 
-def get_personality_menu_context(user_id: int, bot_data: Dict) -> Optional[Dict[str, Any]]:
+def get_personality_menu_context(user_data: Dict) -> Optional[Dict[str, Any]]:
     """
     Get saved personality menu context for user.
 
     Args:
-        user_id: User ID
-        bot_data: Bot data dict
+        user_data: User data dict (PERSISTED to DB!)
 
     Returns:
         Saved context dict or None
     """
-    contexts = bot_data.get('personality_menu_contexts', {})
-    return contexts.get(user_id)
+    return user_data.get('personality_menu_context')
 
 
 async def restore_personality_menu_from_context(
     update,
-    user_id: int,
-    bot_data: Dict,
+    user_data: Dict,
     success_message: str
 ) -> None:
     """
@@ -68,14 +60,15 @@ async def restore_personality_menu_from_context(
 
     Args:
         update: Telegram update object (can be Message or CallbackQuery)
-        user_id: User ID
-        bot_data: Bot data dict
+        user_data: User data dict (PERSISTED to DB!)
         success_message: Success message to show
     """
     from config import logger
 
+    user_id = update.effective_user.id
+
     # Get saved context
-    saved_context = get_personality_menu_context(user_id, bot_data)
+    saved_context = get_personality_menu_context(user_data)
 
     if not saved_context:
         # Fallback to /lichnost menu if no context saved
@@ -90,7 +83,7 @@ async def restore_personality_menu_from_context(
 
         from modules.personalities import show_personality_menu_callback
         await update.effective_message.reply_text(success_message)
-        await show_personality_menu_callback(fake_query, user_id, bot_data)
+        await show_personality_menu_callback(fake_query, user_data)
         return
 
     callback_prefix = saved_context['callback_prefix']

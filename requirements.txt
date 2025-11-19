@@ -24,6 +24,7 @@ aiohttp==3.10.10
 
 # Utilities
 python-dateutil==2.9.0
+tenacity==8.2.3  # Retry logic for transient failures
 
 # Payment Processing
 yookassa==3.3.0

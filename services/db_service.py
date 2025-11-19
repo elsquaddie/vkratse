@@ -11,6 +11,7 @@ from supabase import create_client, Client
 import config
 from config import logger
 from models import Message, Personality, User, Chat
+from utils.retry import db_retry  # ШАГ 9: Retry logic for DB operations
 import atexit
 
 # ================================================
@@ -69,6 +70,7 @@ class DBService:
     # MESSAGES
     # ================================================
 
+    @db_retry  # ШАГ 9: Retry on transient DB failures
     def save_message(
         self,
         chat_id: int,
@@ -1232,6 +1234,7 @@ class DBService:
     # WEBHOOK IDEMPOTENCY (ШАГ 7: Security Fix)
     # ================================================
 
+    @db_retry  # ШАГ 9: Retry on transient DB failures
     def check_and_mark_webhook_processed(
         self,
         webhook_type: str,

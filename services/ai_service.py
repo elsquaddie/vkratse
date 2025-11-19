@@ -8,6 +8,7 @@ import anthropic
 import config
 from config import logger
 from models import Message, Personality
+from utils.retry import ai_retry  # ШАГ 9: Retry logic for AI operations
 
 
 class AIService:
@@ -18,6 +19,7 @@ class AIService:
         self.client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
         self.model = config.ANTHROPIC_MODEL
 
+    @ai_retry  # ШАГ 9: Retry on AI API failures
     def generate_summary(
         self,
         messages: List[Message],
@@ -82,6 +84,7 @@ class AIService:
             logger.error(f"Error generating summary: {e}")
             return f"❌ Ошибка при генерации саммари: {str(e)}"
 
+    @ai_retry  # ШАГ 9: Retry on AI API failures
     def generate_judge_verdict(
         self,
         dispute_text: Optional[str],
@@ -159,6 +162,7 @@ class AIService:
             logger.error(f"Error generating verdict: {e}")
             return f"❌ Ошибка при генерации вердикта: {str(e)}"
 
+    @ai_retry  # ШАГ 9: Retry on AI API failures
     def generate_chat_response(
         self,
         user_message: str,
@@ -217,6 +221,7 @@ class AIService:
             logger.error(f"Error generating chat response: {e}")
             return f"❌ Ошибка при генерации ответа: {str(e)}"
 
+    @ai_retry  # ШАГ 9: Retry on AI API failures
     def generate_greeting(
         self,
         personality: Personality

@@ -222,6 +222,8 @@ async def handle_start_menu_callback(update: Update, context: ContextTypes.DEFAU
             user = query.from_user
             chat_id = update.effective_chat.id
 
+            logger.info(f"[GROUP SUMMARY CALLBACK] Showing personality menu for user {user.id} in chat {chat_id}")
+
             # Build personality menu using universal builder
             keyboard = build_personality_menu(
                 user_id=user.id,
@@ -233,6 +235,8 @@ async def handle_start_menu_callback(update: Update, context: ContextTypes.DEFAU
                 show_back_button=True,  # Show back button to return to main menu
                 back_callback="back_to_main"
             )
+
+            logger.info(f"[GROUP SUMMARY CALLBACK] Personality menu built successfully, editing message for user {user.id}")
 
             await query.edit_message_text(
                 "🎭 Выбери личность для саммари:",

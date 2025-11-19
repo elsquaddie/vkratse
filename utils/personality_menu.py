@@ -58,6 +58,8 @@ def build_personality_menu(
     """
     from utils.security import sign_callback_data
 
+    from config import logger
+
     db = DBService()
     keyboard = []
 
@@ -76,6 +78,18 @@ def build_personality_menu(
         p for p in all_personalities
         if p.is_custom and p.created_by_user_id == user_id
     ]
+
+    # DEBUG: Log personality menu building
+    logger.info(
+        f"[PERSONALITY MENU] Building menu for user_id={user_id}, "
+        f"callback_prefix={callback_prefix}, total_personalities={len(all_personalities)}, "
+        f"base={len(base_personalities)}, custom={len(custom_personalities)}"
+    )
+    if custom_personalities:
+        logger.info(
+            f"[PERSONALITY MENU] Custom personalities: "
+            f"{[(p.display_name, p.created_by_user_id, p.is_blocked) for p in custom_personalities]}"
+        )
 
     # 3. Build keyboard for base personalities (2 columns)
     row = []

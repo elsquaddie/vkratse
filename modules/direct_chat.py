@@ -383,8 +383,10 @@ async def handle_direct_message(
 
 async def chat_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
-    Handle /chat command in group chats.
-    Shows personality selection menu for starting a chat session (unified version).
+    Handle /chat command - unified personality selection for all chat types.
+
+    In groups: Start chat session with selected personality
+    In DM: Show personality selection menu (same as /lichnost for chat context)
 
     Args:
         update: Telegram update object
@@ -393,31 +395,46 @@ async def chat_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     user = update.effective_user
     chat = update.effective_chat
 
-    # Only work in groups
-    if chat.type == ChatType.PRIVATE:
-        await update.message.reply_text(
-            "💬 В личных сообщениях ты можешь сразу писать мне!\n\n"
-            f"Просто выбери личность через /{config.COMMAND_PERSONALITY} и начинай общаться."
-        )
-        return
-
     try:
         from utils import build_personality_menu
 
-        # Build menu using universal function
-        # Pass user_id in extra_callback_data so only this user can select personality
+        # In DM: show unified personality selection menu
+        if chat.type == ChatType.PRIVATE:
+            reply_markup = build_personality_menu(
+                user_id=user.id,
+                callback_prefix="sel_pers",
+                context="select",
+                current_personality=None,  # No checkmark
+                show_create_button=True,  # UNIFIED: same as all other contexts
+                show_back_button=False
+            )
+
+            text = (
+                "🎭 Выбери личность для общения:\n\n"
+                "💬 После выбора можешь просто писать мне сообщения - "
+                "я буду отвечать в выбранном стиле!"
+            )
+
+            await update.message.reply_text(text, reply_markup=reply_markup)
+            return
+
+        # In groups: show unified personality selection menu for session
         reply_markup = build_personality_menu(
             user_id=user.id,
             callback_prefix="start_chat",
             context="select",
             current_personality=None,  # No checkmark
             extra_callback_data={"user_id": user.id},  # Include initiator's user_id
-            show_create_button=False,  # Don't show create button in group chat context
+            show_create_button=True,  # UNIFIED: allow creating personalities from any command
             show_back_button=False
         )
 
         # Build text
-        text = "🎭 Выбери личность для общения в этом чате:\n\n💬 После выбора я буду отвечать только на твои сообщения (через reply или @упоминание)"
+        text = (
+            "🎭 Выбери личность для общения в этом чате:\n\n"
+            "💬 После выбора я буду отвечать только на твои сообщения "
+            "(через reply или @упоминание)"
+        )
 
         await update.message.reply_text(text, reply_markup=reply_markup)
 

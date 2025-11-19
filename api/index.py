@@ -112,6 +112,7 @@ try:
         handle_judge_cancel_callback,
         receive_dispute_description,
         cancel_judge,
+        cancel_judge_inline,
         AWAITING_DISPUTE_DESCRIPTION
     )
     from modules.personalities import (
@@ -379,10 +380,12 @@ def create_bot_application():
             ]
         },
         fallbacks=[
-            CommandHandler("cancel", cancel_judge, filters=filters.ChatType.GROUPS)
+            CommandHandler("cancel", cancel_judge, filters=filters.ChatType.GROUPS),
+            CallbackQueryHandler(cancel_judge_inline, pattern=r"^judge_cancel_inline:")
         ],
         name="judge_conversation",
-        persistent=True  # Enable persistence for serverless environment
+        persistent=True,  # Enable persistence for serverless environment
+        conversation_timeout=config.CONVERSATION_TIMEOUT  # Auto-cancel after 10 minutes of inactivity
     )
     app.add_handler(judge_conv)
     verbose_log("✅ Judge ConversationHandler registered")
@@ -461,7 +464,8 @@ def create_bot_application():
             CommandHandler("cancel", cancel_personality_creation)
         ],
         name="personality_conversation",
-        persistent=True  # Enable persistence for serverless environment
+        persistent=True,  # Enable persistence for serverless environment
+        conversation_timeout=config.CONVERSATION_TIMEOUT  # Auto-cancel after 10 minutes of inactivity
     )
     app.add_handler(personality_conv)
 

@@ -3,7 +3,7 @@ Judge command (/рассуди)
 AI judges disputes in chat
 """
 
-from telegram import Update, ReplyKeyboardRemove
+from telegram import Update, ReplyKeyboardRemove, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, ConversationHandler
 import config
 from config import logger
@@ -15,6 +15,7 @@ from utils import (
     verify_signature, create_signature
 )
 from utils.upgrade_messages import show_upgrade_message
+from utils.security import sign_callback_data
 
 # ConversationHandler states
 AWAITING_DISPUTE_DESCRIPTION = 1
@@ -32,11 +33,14 @@ async def judge_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     db = DBService()
     subscription = SubscriptionService(db)
 
+    # LOG: State transition
+    logger.info(f"[JUDGE CONV] Entry point triggered: /rassudi command by user {user.id} in chat {chat.id}")
+
     # FIX: Clear any previous judge conversation state to ensure clean start
     # This prevents stuck conversations from blocking new attempts
     context.user_data.pop('judge_dispute_text', None)
     context.user_data.pop('judge_chat_id', None)
-    logger.info(f"[JUDGE COMMAND] Cleared previous conversation state for user {user.id}")
+    logger.info(f"[JUDGE CONV] Cleared previous conversation state for user {user.id}")
 
     # ================================================
     # MONETIZATION: Check usage limit for judge
@@ -74,15 +78,23 @@ async def judge_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     # Save chat_id for later use
     context.user_data['judge_chat_id'] = chat.id
 
+    # Create cancel button
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("❌ Отмена", callback_data=sign_callback_data("judge_cancel_inline"))]
+    ])
+
     # Ask user to describe the dispute
     await update.message.reply_text(
         "⚖️ Опиши спор в следующем сообщении!\n\n"
         "Например:\n"
         "• Дамирка и Настька поспорили о плоской земле. Кто прав?\n"
         "• Ребята поругались насчёт Python vs JavaScript\n\n"
-        "Я проанализирую контекст беседы и рассужу спор в выбранном стиле!\n\n"
-        "Чтобы отменить, напиши /cancel"
+        "Я проанализирую контекст беседы и рассужу спор в выбранном стиле!",
+        reply_markup=keyboard
     )
+
+    # LOG: State transition
+    logger.info(f"[JUDGE CONV] State transition: → AWAITING_DISPUTE_DESCRIPTION (user {user.id})")
 
     return AWAITING_DISPUTE_DESCRIPTION
 
@@ -98,9 +110,9 @@ async def judge_command_from_button(update: Update, context: ContextTypes.DEFAUL
 
     query = update.callback_query
 
-    # LOG: Debug callback data
+    # LOG: State transition
+    logger.info(f"[JUDGE CONV] Entry point triggered: button click by user {query.from_user.id} in chat {update.effective_chat.id}")
     logger.info(f"[JUDGE BUTTON] Callback received: {query.data}")
-    logger.info(f"[JUDGE BUTTON] User: {query.from_user.id}, Chat: {update.effective_chat.id}")
 
     await query.answer()
 
@@ -159,15 +171,23 @@ async def judge_command_from_button(update: Update, context: ContextTypes.DEFAUL
     # Save chat_id for later use
     context.user_data['judge_chat_id'] = chat.id
 
+    # Create cancel button
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("❌ Отмена", callback_data=sign_callback_data("judge_cancel_inline"))]
+    ])
+
     # Ask user to describe the dispute (edit the button message)
     await query.edit_message_text(
         "⚖️ Опиши спор в следующем сообщении!\n\n"
         "Например:\n"
         "• Дамирка и Настька поспорили о плоской земле. Кто прав?\n"
         "• Ребята поругались насчёт Python vs JavaScript\n\n"
-        "Я проанализирую контекст беседы и рассужу спор в выбранном стиле!\n\n"
-        "Чтобы отменить, напиши /cancel"
+        "Я проанализирую контекст беседы и рассужу спор в выбранном стиле!",
+        reply_markup=keyboard
     )
+
+    # LOG: State transition
+    logger.info(f"[JUDGE CONV] State transition: → AWAITING_DISPUTE_DESCRIPTION (user {user.id})")
 
     return AWAITING_DISPUTE_DESCRIPTION
 
@@ -179,6 +199,9 @@ async def receive_dispute_description(update: Update, context: ContextTypes.DEFA
     user = update.effective_user
     chat_id = context.user_data.get('judge_chat_id')
     dispute_text = update.message.text.strip()
+
+    # LOG: State handler called
+    logger.info(f"[JUDGE CONV] State handler AWAITING_DISPUTE_DESCRIPTION: received description from user {user.id}, length={len(dispute_text)}")
 
     # Validate description length
     if len(dispute_text) < 10:
@@ -217,12 +240,21 @@ async def receive_dispute_description(update: Update, context: ContextTypes.DEFA
         reply_markup=keyboard
     )
 
+    # LOG: State transition
+    logger.info(f"[JUDGE CONV] State transition: AWAITING_DISPUTE_DESCRIPTION → END (user {user.id})")
+    logger.info(f"[JUDGE CONV] Conversation ended, waiting for personality selection callback")
+
     # End conversation - callback handler will take over
     return ConversationHandler.END
 
 
 async def cancel_judge(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Cancel judge conversation"""
+    user = update.effective_user
+
+    # LOG: Cancellation
+    logger.info(f"[JUDGE CONV] User {user.id} cancelled judge conversation via /cancel")
+
     # Clear context
     context.user_data.pop('judge_dispute_text', None)
     context.user_data.pop('judge_chat_id', None)
@@ -232,6 +264,42 @@ async def cancel_judge(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
         "Чтобы начать заново, используй /rassudi",
         reply_markup=ReplyKeyboardRemove()
     )
+
+    # LOG: State transition
+    logger.info(f"[JUDGE CONV] State transition: → END (cancelled by user {user.id})")
+
+    return ConversationHandler.END
+
+
+async def cancel_judge_inline(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handle inline cancel button click during dispute description input"""
+    from utils.security import verify_callback_data
+
+    query = update.callback_query
+    user = query.from_user
+
+    # LOG: Inline cancellation
+    logger.info(f"[JUDGE CONV] User {user.id} clicked inline cancel button")
+
+    await query.answer()
+
+    # Verify HMAC signature
+    if not verify_callback_data(query.data):
+        logger.error(f"[JUDGE CONV] HMAC verification failed for inline cancel")
+        await query.edit_message_text("❌ Неверная подпись данных.")
+        return ConversationHandler.END
+
+    # Clear context
+    context.user_data.pop('judge_dispute_text', None)
+    context.user_data.pop('judge_chat_id', None)
+
+    await query.edit_message_text(
+        "❌ Судейство отменено.\n\n"
+        "Чтобы начать заново, используй /rassudi или нажми кнопку \"⚖️ Рассудить\" в /start"
+    )
+
+    # LOG: State transition
+    logger.info(f"[JUDGE CONV] State transition: → END (cancelled via inline button by user {user.id})")
 
     return ConversationHandler.END
 
@@ -282,11 +350,14 @@ async def handle_judge_personality_callback(update: Update, context: ContextType
     db = DBService()
     ai = AIService()
 
+    # LOG: Callback handler called
+    logger.info(f"[JUDGE CONV] Personality selection callback received from user {user.id}")
+
     try:
         # Parse callback data: judge_personality:<chat_id>:<personality_id>:<signature>
         parts = query.data.split(":")
         if len(parts) != 4:
-            logger.error(f"Invalid judge callback format: expected 4 parts, got {len(parts)}")
+            logger.error(f"[JUDGE CONV] Invalid judge callback format: expected 4 parts, got {len(parts)}")
             await query.edit_message_text("❌ Неверный формат данных")
             return
 
@@ -401,8 +472,11 @@ async def handle_judge_personality_callback(update: Update, context: ContextType
         context.user_data.pop('judge_dispute_text', None)
         context.user_data.pop('judge_chat_id', None)
 
+        # LOG: Success
+        logger.info(f"[JUDGE CONV] Verdict generated successfully for user {user.id} in chat {chat_id} using personality {personality.name}")
+
     except Exception as e:
-        logger.error(f"Error in judge personality callback: {e}")
+        logger.error(f"[JUDGE CONV] Error in judge personality callback: {e}")
         await query.edit_message_text(
             "❌ Ошибка при генерации вердикта. Попробуй позже."
         )

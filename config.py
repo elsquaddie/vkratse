@@ -71,6 +71,9 @@ MAX_CUSTOM_PERSONALITIES_PER_USER = int(os.getenv('MAX_CUSTOM_PERSONALITIES_PER_
 DIRECT_CHAT_CONTEXT_MESSAGES = int(os.getenv('DIRECT_CHAT_CONTEXT_MESSAGES', 30))  # Number of messages in context
 DIRECT_CHAT_SESSION_TIMEOUT = int(os.getenv('DIRECT_CHAT_SESSION_TIMEOUT', 900))  # 15 minutes in seconds
 
+# ConversationHandler settings
+CONVERSATION_TIMEOUT = int(os.getenv('CONVERSATION_TIMEOUT', 600))  # 10 minutes - auto-cancel stuck conversations
+
 # ================================================
 # MONETIZATION SETTINGS (v2.1)
 # ================================================

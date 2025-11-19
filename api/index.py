@@ -399,6 +399,37 @@ def create_bot_application():
         pattern="^judge_cancel:"
     ))
 
+    # IMPORTANT: Handle "always-available" personality callbacks BEFORE ConversationHandler
+    # These buttons should work even if conversation is stuck in a state
+    async def handle_personality_utility_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle utility personality callbacks that should always work (menu, check_group, upgrade_pro)"""
+        query = update.callback_query
+        await query.answer()
+
+        # Extract action from callback data (format: "pers:action" or "pers:action:param")
+        parts = query.data.split(':')
+        if len(parts) < 2:
+            return
+
+        action = parts[1]
+
+        logger.info(f"[PERSONALITY UTILITY] Handling {action} callback (always-available)")
+
+        # Call personality_callback for actual handling
+        # This ensures consistency with ConversationHandler behavior
+        result = await personality_callback(update, context)
+
+        # If result is END, we're done
+        # If result is a state, it means conversation wants to continue
+        # but we don't manage that here - ConversationHandler will pick it up
+        return result
+
+    app.add_handler(CallbackQueryHandler(
+        handle_personality_utility_callbacks,
+        pattern=r"^pers:(menu|check_group|upgrade_pro|blocked)$"
+    ))
+    verbose_log("✅ Personality utility callbacks registered (always-available: menu, check_group, upgrade_pro, blocked)")
+
     # Personality command with conversation for creating/editing custom ones
     personality_conv = ConversationHandler(
         entry_points=[

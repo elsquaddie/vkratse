@@ -36,9 +36,13 @@ async def personality_command(update: Update, context: ContextTypes.DEFAULT_TYPE
     user = update.effective_user
     db = DBService()
 
+    logger.info(f"[LICHNOST] Command called by user_id={user.id}, username={user.username}")
+
     # Get current personality for display only (no checkmark in menu)
     current_personality_name = db.get_user_personality(user.id)
     current_display = get_current_personality_display(user.id)
+
+    logger.info(f"[LICHNOST] Current personality for user {user.id}: {current_personality_name}")
 
     # Build menu using universal function (management context)
     # NOTE: current_personality=None to avoid checkmark (по философии: нет дефолтной личности)

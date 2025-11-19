@@ -383,7 +383,7 @@ def create_bot_application():
         ],
         name="judge_conversation",
         persistent=True,  # Enable persistence for serverless environment
-        per_message=False  # FIX: Suppress warning about per_message tracking
+        per_message=True  # Required for CallbackQueryHandler in entry_points
     )
     app.add_handler(judge_conv)
     verbose_log("✅ Judge ConversationHandler registered")
@@ -463,7 +463,7 @@ def create_bot_application():
         ],
         name="personality_conversation",
         persistent=True,  # Enable persistence for serverless environment
-        per_message=False  # FIX: Suppress warning about per_message tracking
+        per_message=True  # Required for CallbackQueryHandler in entry_points and states
     )
     app.add_handler(personality_conv)
 

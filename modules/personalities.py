@@ -36,6 +36,13 @@ async def personality_command(update: Update, context: ContextTypes.DEFAULT_TYPE
     user = update.effective_user
     db = DBService()
 
+    # FIX: Clear any previous personality conversation state to ensure clean start
+    context.user_data.pop('editing_personality', None)
+    context.user_data.pop('personality_name', None)
+    context.user_data.pop('personality_emoji', None)
+    context.user_data.pop('personality_description', None)
+    logger.info(f"[PERSONALITY COMMAND] Cleared previous conversation state for user {user.id}")
+
     # Get current personality for display only (no checkmark in menu)
     current_personality_name = db.get_user_personality(user.id)
     current_display = get_current_personality_display(user.id)
@@ -182,6 +189,13 @@ async def personality_callback(update: Update, context: ContextTypes.DEFAULT_TYP
 
     # Handle create start
     elif action == "create_start":
+        # FIX: Clear any previous personality conversation state to ensure clean start
+        context.user_data.pop('editing_personality', None)
+        context.user_data.pop('personality_name', None)
+        context.user_data.pop('personality_emoji', None)
+        context.user_data.pop('personality_description', None)
+        logger.info(f"[PERSONALITY CREATE] Cleared previous conversation state for user {user.id}")
+
         # ВАЖНО: Проверить лимит кастомных личностей
         subscription_service = get_subscription_service()
         check = await subscription_service.can_create_custom_personality(user.id, context.bot)

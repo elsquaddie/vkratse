@@ -106,6 +106,7 @@ try:
     )
     from modules.judge import (
         judge_command,
+        judge_command_from_button,
         handle_judge_personality_callback,
         handle_judge_cancel_callback,
         receive_dispute_description,
@@ -368,7 +369,8 @@ def create_bot_application():
     # Judge command with ConversationHandler (groups only)
     judge_conv = ConversationHandler(
         entry_points=[
-            CommandHandler(config.COMMAND_JUDGE, judge_command, filters=filters.ChatType.GROUPS)
+            CommandHandler(config.COMMAND_JUDGE, judge_command, filters=filters.ChatType.GROUPS),
+            CallbackQueryHandler(judge_command_from_button, pattern="^group_judge:")  # Button trigger
         ],
         states={
             AWAITING_DISPUTE_DESCRIPTION: [
@@ -432,9 +434,10 @@ def create_bot_application():
 
     # Direct chat handlers (Phase 2)
     # Handle /start menu callbacks (including payment callbacks)
+    # NOTE: "group_judge" is handled by judge_conv ConversationHandler above
     app.add_handler(CallbackQueryHandler(
         handle_start_menu_callback,
-        pattern="^(direct_chat|setup_personality|dm_summary|group_summary|group_judge|back_to_main|show_premium|buy_pro|buy_pro_card|buy_pro_stars|buy_pro_tribute|cancel_subscription|confirm_cancel_subscription):"
+        pattern="^(direct_chat|setup_personality|dm_summary|group_summary|back_to_main|show_premium|buy_pro|buy_pro_card|buy_pro_stars|buy_pro_tribute|cancel_subscription|confirm_cancel_subscription):"
     ))
 
     # Handle personality selection callbacks

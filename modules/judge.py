@@ -22,7 +22,7 @@ AWAITING_DISPUTE_DESCRIPTION = 1
 
 async def judge_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """
-    Handle /рассуди command - entry point for conversation
+    Handle /рассуди command - entry point for conversation (GROUPS ONLY)
 
     NEW LOGIC: Simply asks user to describe the dispute in next message
     No more need to type everything in one command!
@@ -70,6 +70,77 @@ async def judge_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
 
     # Ask user to describe the dispute
     await update.message.reply_text(
+        "⚖️ Опиши спор в следующем сообщении!\n\n"
+        "Например:\n"
+        "• Дамирка и Настька поспорили о плоской земле. Кто прав?\n"
+        "• Ребята поругались насчёт Python vs JavaScript\n\n"
+        "Я проанализирую контекст беседы и рассужу спор в выбранном стиле!\n\n"
+        "Чтобы отменить, напиши /cancel"
+    )
+
+    return AWAITING_DISPUTE_DESCRIPTION
+
+
+async def judge_command_from_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """
+    Handle judge command triggered from inline button (GROUPS ONLY)
+
+    This is an entry point for ConversationHandler triggered by "group_judge" callback button.
+    Works exactly like judge_command but with CallbackQuery instead of Message.
+    """
+    from utils.security import verify_callback_data
+
+    query = update.callback_query
+    await query.answer()
+
+    # Verify HMAC signature
+    if not verify_callback_data(query.data):
+        await query.edit_message_text("❌ Неверная подпись данных. Попробуй /start")
+        return ConversationHandler.END
+
+    user = query.from_user
+    chat = update.effective_chat
+    db = DBService()
+    subscription = SubscriptionService(db)
+
+    # ================================================
+    # MONETIZATION: Check usage limit for judge
+    # ================================================
+    limit_check = await subscription.check_usage_limit(user.id, 'judge')
+
+    if not limit_check['can_proceed']:
+        # User has exceeded their daily judge limit
+        await show_upgrade_message(
+            update=update,
+            reason="Лимит судейства исчерпан",
+            tier=limit_check['tier'],
+            limit_type='judge',
+            current=limit_check['current'],
+            limit=limit_check['limit']
+        )
+        return ConversationHandler.END
+
+    # Rate limit check
+    ok, remaining = check_rate_limit(user.id)
+    if not ok:
+        await query.edit_message_text(
+            f"⏰ Слишком много запросов. Подожди {remaining} секунд."
+        )
+        return ConversationHandler.END
+
+    # Cooldown check
+    ok, remaining = check_cooldown(chat.id, 'judge')
+    if not ok:
+        await query.edit_message_text(
+            f"⏰ Чат на кулдауне. Подожди {remaining} секунд."
+        )
+        return ConversationHandler.END
+
+    # Save chat_id for later use
+    context.user_data['judge_chat_id'] = chat.id
+
+    # Ask user to describe the dispute (edit the button message)
+    await query.edit_message_text(
         "⚖️ Опиши спор в следующем сообщении!\n\n"
         "Например:\n"
         "• Дамирка и Настька поспорили о плоской земле. Кто прав?\n"
@@ -178,7 +249,7 @@ async def handle_judge_cancel_callback(update: Update, context: ContextTypes.DEF
 
 async def handle_judge_personality_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
-    Handle personality selection callback for judge command
+    Handle personality selection callback for judge command (GROUPS ONLY)
 
     Callback format: judge_personality:<chat_id>:<personality_id>:<signature>
     """
@@ -224,7 +295,7 @@ async def handle_judge_personality_callback(update: Update, context: ContextType
         if not dispute_text:
             await query.edit_message_text(
                 "❌ Контекст спора потерян. Попробуй снова:\n"
-                f"/{config.COMMAND_JUDGE} <описание спора>"
+                f"/{config.COMMAND_JUDGE}"
             )
             return
 
@@ -267,6 +338,7 @@ async def handle_judge_personality_callback(update: Update, context: ContextType
 
         # Get recent messages for context
         messages = db.get_messages(chat_id=chat_id, limit=50)
+        logger.info(f"[JUDGE] Analyzing {len(messages)} messages from group chat")
 
         # Update message to show processing
         await query.edit_message_text(
@@ -282,17 +354,6 @@ async def handle_judge_personality_callback(update: Update, context: ContextType
 
         # Edit the message with verdict
         await query.edit_message_text(verdict_message)
-
-        # Remove reply keyboard if it exists (from group_judge menu)
-        # This restores the default command menu "/"
-        try:
-            await update.effective_message.reply_text(
-                "✅ Вердикт вынесен!",
-                reply_markup=ReplyKeyboardRemove()
-            )
-        except Exception as e:
-            # If message fails (e.g., in channel), just log and continue
-            logger.warning(f"Failed to remove reply keyboard: {e}")
 
         # ================================================
         # MONETIZATION: Increment usage counter after successful verdict

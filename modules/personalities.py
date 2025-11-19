@@ -111,15 +111,25 @@ async def personality_callback(update: Update, context: ContextTypes.DEFAULT_TYP
 
     action = parts[1]
 
-    # Handle blocked personality - IMPORTANT: answer with alert BEFORE returning
+    # Handle blocked personality - show message with action buttons
     if action == "blocked":
-        await query.answer(
+        await query.answer()  # Acknowledge callback without alert
+
+        keyboard = [
+            [InlineKeyboardButton("👥 Вступить в группу", url=config.PROJECT_GROUP_LINK)],
+            [InlineKeyboardButton("✅ Проверить подписку", callback_data="pers:check_group")],
+            [InlineKeyboardButton("⭐ Обновиться до Pro", callback_data="pers:upgrade_pro")],
+            [InlineKeyboardButton("◀️ Назад к личностям", callback_data="pers:menu")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
+        await query.message.edit_text(
             "🔒 Эта личность заблокирована\n\n"
             "Чтобы разблокировать:\n"
-            "• Оформи Pro-подписку: /premium\n"
-            "• Или вернись в группу проекта для бонусного слота\n\n"
+            "• Вступи в группу проекта для получения 1 бонусного слота\n"
+            "• Или обновись до Pro для 3 слотов\n\n"
             "После подписки личность автоматически разблокируется!",
-            show_alert=True
+            reply_markup=reply_markup
         )
         return ConversationHandler.END
 
@@ -141,13 +151,21 @@ async def personality_callback(update: Update, context: ContextTypes.DEFAULT_TYP
 
         # Check if personality is blocked
         if personality.is_blocked:
-            await query.answer(
-                "🔒 Эта личность заблокирована\n\n"
+            keyboard = [
+                [InlineKeyboardButton("👥 Вступить в группу", url=config.PROJECT_GROUP_LINK)],
+                [InlineKeyboardButton("✅ Проверить подписку", callback_data="pers:check_group")],
+                [InlineKeyboardButton("⭐ Обновиться до Pro", callback_data="pers:upgrade_pro")],
+                [InlineKeyboardButton("◀️ Назад к личностям", callback_data="pers:menu")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+
+            await query.message.edit_text(
+                f"🔒 Личность \"{personality.display_name}\" заблокирована\n\n"
                 "Чтобы разблокировать:\n"
-                "• Оформи Pro-подписку: /premium\n"
-                "• Или вернись в группу проекта для бонусного слота\n\n"
+                "• Вступи в группу проекта для получения 1 бонусного слота\n"
+                "• Или обновись до Pro для 3 слотов\n\n"
                 "После подписки личность автоматически разблокируется!",
-                show_alert=True
+                reply_markup=reply_markup
             )
             return ConversationHandler.END
 
@@ -300,6 +318,7 @@ async def personality_callback(update: Update, context: ContextTypes.DEFAULT_TYP
 
     # Handle check group subscription
     elif action == "check_group":
+        await query.answer("Проверяю членство в группе...")
         subscription_service = get_subscription_service()
         is_member = await subscription_service.is_in_project_group(user.id, context.bot, force_check=True)
 
@@ -308,31 +327,40 @@ async def personality_callback(update: Update, context: ContextTypes.DEFAULT_TYP
             await db.unblock_group_bonus_personalities(user.id)
             logger.info(f"Unblocked group bonus personalities for user {user.id} via check_group")
 
-            # Recheck limits
-            check = await subscription_service.can_create_custom_personality(user.id, context.bot)
+            # Show success message with updated menu
+            current_display = get_current_personality_display(user.id)
+            reply_markup = build_personality_menu(
+                user_id=user.id,
+                callback_prefix="pers:select",
+                context="manage",
+                current_personality=None,
+                show_create_button=True
+            )
 
-            if check['can_create']:
-                await query.answer(
-                    "✅ Подписка подтверждена! Личности разблокированы.\n\n"
-                    "Теперь можешь создавать новые личности.",
-                    show_alert=True
-                )
-                # Show personality menu again
-                await show_personality_menu_callback(query, user.id)
-                return ConversationHandler.END
-            else:
-                await query.answer(
-                    f"✅ Подписка подтверждена! Личности разблокированы.\n\n"
-                    f"Лимит: {check['current']}/{check['limit']}",
-                    show_alert=True
-                )
-                # Refresh menu to show unblocked personalities
-                await show_personality_menu_callback(query, user.id)
+            await query.message.edit_text(
+                f"✅ Подписка подтверждена!\n\n"
+                f"Твои личности разблокированы и доступны для использования.\n\n"
+                f"🎭 Выбери личность AI\n\n"
+                f"Текущая: {current_display}\n\n"
+                f"💡 Кастомные личности можно редактировать ✏️ или удалять 🗑️",
+                reply_markup=reply_markup
+            )
         else:
-            await query.answer(
-                "⚠️ Ты не состоишь в группе проекта.\n\n"
-                "Вступи в группу и попробуй снова!",
-                show_alert=True
+            # Show error message with retry buttons
+            keyboard = [
+                [InlineKeyboardButton("👥 Вступить в группу", url=config.PROJECT_GROUP_LINK)],
+                [InlineKeyboardButton("🔄 Проверить снова", callback_data="pers:check_group")],
+                [InlineKeyboardButton("◀️ Назад к личностям", callback_data="pers:menu")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+
+            await query.message.edit_text(
+                "⚠️ Ты не состоишь в группе проекта\n\n"
+                "Чтобы разблокировать бонусные личности:\n"
+                "1. Вступи в группу проекта (кнопка ниже)\n"
+                "2. Нажми \"Проверить снова\"\n\n"
+                "После вступления личности разблокируются автоматически!",
+                reply_markup=reply_markup
             )
 
         return ConversationHandler.END

@@ -365,18 +365,18 @@ def create_bot_application():
     app.add_handler(CommandHandler(config.COMMAND_CHAT, chat_command))
     app.add_handler(CommandHandler(config.COMMAND_STOP, stop_command))
 
-    # Judge command with ConversationHandler (groups only)
+    # Judge command with ConversationHandler (groups AND private chats)
     judge_conv = ConversationHandler(
         entry_points=[
-            CommandHandler(config.COMMAND_JUDGE, judge_command, filters=filters.ChatType.GROUPS)
+            CommandHandler(config.COMMAND_JUDGE, judge_command)  # Removed filter - works everywhere
         ],
         states={
             AWAITING_DISPUTE_DESCRIPTION: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND & filters.ChatType.GROUPS, receive_dispute_description)
+                MessageHandler(filters.TEXT & ~filters.COMMAND, receive_dispute_description)  # Removed filter
             ]
         },
         fallbacks=[
-            CommandHandler("cancel", cancel_judge, filters=filters.ChatType.GROUPS)
+            CommandHandler("cancel", cancel_judge)  # Removed filter
         ],
         name="judge_conversation",
         persistent=True  # Enable persistence for serverless environment

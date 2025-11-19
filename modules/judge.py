@@ -26,7 +26,13 @@ async def judge_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
 
     NEW LOGIC: Simply asks user to describe the dispute in next message
     No more need to type everything in one command!
+
+    Works in:
+    - Groups: analyzes chat history + dispute description
+    - Private chats: judges based on dispute description only
     """
+    from telegram.constants import ChatType
+
     user = update.effective_user
     chat = update.effective_chat
     db = DBService()
@@ -57,26 +63,43 @@ async def judge_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         )
         return ConversationHandler.END
 
-    # Cooldown check
-    ok, remaining = check_cooldown(chat.id, 'judge')
-    if not ok:
-        await update.message.reply_text(
-            f"⏰ Чат на кулдауне. Подожди {remaining} секунд."
-        )
-        return ConversationHandler.END
+    # Cooldown check (only for groups)
+    if chat.type in [ChatType.GROUP, ChatType.SUPERGROUP]:
+        ok, remaining = check_cooldown(chat.id, 'judge')
+        if not ok:
+            await update.message.reply_text(
+                f"⏰ Чат на кулдауне. Подожди {remaining} секунд."
+            )
+            return ConversationHandler.END
 
-    # Save chat_id for later use
+    # Save chat_id and chat_type for later use
     context.user_data['judge_chat_id'] = chat.id
+    context.user_data['judge_chat_type'] = chat.type
 
-    # Ask user to describe the dispute
-    await update.message.reply_text(
-        "⚖️ Опиши спор в следующем сообщении!\n\n"
-        "Например:\n"
-        "• Дамирка и Настька поспорили о плоской земле. Кто прав?\n"
-        "• Ребята поругались насчёт Python vs JavaScript\n\n"
-        "Я проанализирую контекст беседы и рассужу спор в выбранном стиле!\n\n"
-        "Чтобы отменить, напиши /cancel"
-    )
+    # Different messages for groups vs private chats
+    if chat.type in [ChatType.GROUP, ChatType.SUPERGROUP]:
+        message = (
+            "⚖️ Опиши спор в следующем сообщении!\n\n"
+            "Например:\n"
+            "• Дамирка и Настька поспорили о плоской земле. Кто прав?\n"
+            "• Ребята поругались насчёт Python vs JavaScript\n\n"
+            "Я проанализирую контекст беседы и рассужу спор в выбранном стиле!\n\n"
+            "Чтобы отменить, напиши /cancel"
+        )
+    else:
+        # Private chat - no history available
+        message = (
+            "⚖️ Опиши спор в следующем сообщении!\n\n"
+            "Например:\n"
+            "• Дамирка и Настька поспорили о плоской земле. Кто прав?\n"
+            "• Ребята поругались насчёт Python vs JavaScript\n\n"
+            "Я рассужу спор на основе твоего описания в выбранном стиле!\n\n"
+            "⚠️ В личном чате я не вижу историю сообщений, поэтому судить буду только по описанию.\n"
+            "Для полного анализа добавь меня в групповой чат!\n\n"
+            "Чтобы отменить, напиши /cancel"
+        )
+
+    await update.message.reply_text(message)
 
     return AWAITING_DISPUTE_DESCRIPTION
 
@@ -181,7 +204,12 @@ async def handle_judge_personality_callback(update: Update, context: ContextType
     Handle personality selection callback for judge command
 
     Callback format: judge_personality:<chat_id>:<personality_id>:<signature>
+
+    Works in:
+    - Groups: analyzes chat history + dispute description
+    - Private chats: judges based on dispute description only (empty messages list)
     """
+    from telegram.constants import ChatType
     from utils.security import verify_string_signature
 
     query = update.callback_query
@@ -224,9 +252,12 @@ async def handle_judge_personality_callback(update: Update, context: ContextType
         if not dispute_text:
             await query.edit_message_text(
                 "❌ Контекст спора потерян. Попробуй снова:\n"
-                f"/{config.COMMAND_JUDGE} <описание спора>"
+                f"/{config.COMMAND_JUDGE}"
             )
             return
+
+        # Get chat type from context
+        chat_type = context.user_data.get('judge_chat_type')
 
         # Get personality
         personality = db.get_personality_by_id(personality_id)
@@ -265,8 +296,13 @@ async def handle_judge_personality_callback(update: Update, context: ContextType
             )
             return
 
-        # Get recent messages for context
-        messages = db.get_messages(chat_id=chat_id, limit=50)
+        # Get recent messages for context (only for groups)
+        messages = []
+        if chat_type in [ChatType.GROUP, ChatType.SUPERGROUP]:
+            messages = db.get_messages(chat_id=chat_id, limit=50)
+            logger.info(f"[JUDGE] Group chat - analyzing {len(messages)} messages from history")
+        else:
+            logger.info(f"[JUDGE] Private chat - no history, judging based on description only")
 
         # Update message to show processing
         await query.edit_message_text(
@@ -307,18 +343,21 @@ async def handle_judge_personality_callback(update: Update, context: ContextType
             action='judge'
         )
 
-        # Set cooldown
-        set_cooldown(chat_id, 'judge')
+        # Set cooldown (only for groups)
+        if chat_type in [ChatType.GROUP, ChatType.SUPERGROUP]:
+            set_cooldown(chat_id, 'judge')
 
         # Log event
         db.log_event(user.id, chat_id, 'judge', {
             'dispute': dispute_text[:200],
-            'personality': personality.name
+            'personality': personality.name,
+            'chat_type': str(chat_type)
         })
 
         # Clear context
         context.user_data.pop('judge_dispute_text', None)
         context.user_data.pop('judge_chat_id', None)
+        context.user_data.pop('judge_chat_type', None)
 
     except Exception as e:
         logger.error(f"Error in judge personality callback: {e}")

@@ -526,6 +526,17 @@ async def process_update(update_data: dict):
         log("⚠️ Cannot process update: bot not initialized")
         return
 
+    # ===== SECURITY: IDEMPOTENCY CHECK (ШАГ 7) =====
+    # Prevent duplicate processing of webhooks from Telegram
+    update_id = update_data.get('update_id')
+    if update_id:
+        from services import DBService
+        db = DBService()
+        if not db.check_and_mark_webhook_processed('telegram', str(update_id), update_data):
+            logger.info(f"⏭️ Skipping duplicate Telegram update {update_id}")
+            return  # Already processed
+    # ===== END IDEMPOTENCY CHECK =====
+
     app = None
     try:
         verbose_log(f"✅ CHECKPOINT 9: Processing update {update_data.get('update_id', 'unknown')}")

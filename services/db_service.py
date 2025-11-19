@@ -1227,3 +1227,57 @@ class DBService:
         except Exception as e:
             logger.error(f"Error unblocking group bonus personalities for {user_id}: {e}")
             return False
+
+    # ================================================
+    # WEBHOOK IDEMPOTENCY (ШАГ 7: Security Fix)
+    # ================================================
+
+    def check_and_mark_webhook_processed(
+        self,
+        webhook_type: str,
+        webhook_id: str,
+        payload: dict = None
+    ) -> bool:
+        """
+        Check if webhook was already processed, and mark as processed if not.
+
+        Prevents duplicate processing of webhooks from Telegram and YooKassa
+        due to network timeouts, retries, or infrastructure issues.
+
+        Args:
+            webhook_type: Type of webhook ('telegram' or 'yookassa')
+            webhook_id: Unique webhook identifier (update_id or payment_id)
+            payload: Optional full payload for debugging
+
+        Returns:
+            True if webhook is NEW (should be processed)
+            False if webhook was already processed (skip)
+        """
+        try:
+            # Check if exists
+            result = self.client.table('webhook_log')\
+                .select('webhook_id')\
+                .eq('webhook_type', webhook_type)\
+                .eq('webhook_id', str(webhook_id))\
+                .execute()
+
+            if result.data:
+                logger.warning(
+                    f"⚠️ Duplicate {webhook_type} webhook: {webhook_id}, skipping"
+                )
+                return False  # Already processed
+
+            # Mark as processed
+            self.client.table('webhook_log').insert({
+                'webhook_type': webhook_type,
+                'webhook_id': str(webhook_id),
+                'payload': payload  # Optional
+            }).execute()
+
+            logger.info(f"✅ New {webhook_type} webhook: {webhook_id}, processing")
+            return True  # New webhook, should process
+
+        except Exception as e:
+            logger.error(f"❌ Idempotency check failed: {e}")
+            # В случае ошибки БД - лучше обработать (риск дубликата, но не потеря данных)
+            return True

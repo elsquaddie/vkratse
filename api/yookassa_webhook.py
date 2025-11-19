@@ -165,6 +165,15 @@ async def handle_payment_succeeded(event: dict) -> tuple:
             logger.error("No payment_id in webhook")
             return {'error': 'Missing payment_id'}, 400
 
+        # ===== SECURITY: IDEMPOTENCY CHECK (ШАГ 7) =====
+        # Prevent duplicate processing of YooKassa payment webhooks
+        from services import DBService
+        db_check = DBService()
+        if not db_check.check_and_mark_webhook_processed('yookassa', payment_id, event):
+            logger.info(f"⏭️ Skipping duplicate YooKassa payment {payment_id}")
+            return {'status': 'ok', 'message': 'Already processed'}, 200
+        # ===== END IDEMPOTENCY CHECK =====
+
         # Verify payment through API (additional security)
         payment_info = await verify_payment(payment_id)
 

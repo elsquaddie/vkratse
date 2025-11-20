@@ -40,6 +40,7 @@ async def judge_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     # This prevents stuck conversations from blocking new attempts
     context.user_data.pop('judge_dispute_text', None)
     context.user_data.pop('judge_chat_id', None)
+    context.user_data.pop('judge_user_id', None)
     logger.info(f"[JUDGE CONV] Cleared previous conversation state for user {user.id}")
 
     # ================================================
@@ -75,8 +76,9 @@ async def judge_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         )
         return ConversationHandler.END
 
-    # Save chat_id for later use
+    # Save chat_id and user_id for later use
     context.user_data['judge_chat_id'] = chat.id
+    context.user_data['judge_user_id'] = user.id
 
     # Create cancel button
     keyboard = InlineKeyboardMarkup([
@@ -133,6 +135,7 @@ async def judge_command_from_button(update: Update, context: ContextTypes.DEFAUL
     # This prevents stuck conversations from blocking new attempts
     context.user_data.pop('judge_dispute_text', None)
     context.user_data.pop('judge_chat_id', None)
+    context.user_data.pop('judge_user_id', None)
     logger.info(f"[JUDGE BUTTON] Cleared previous conversation state for user {user.id}")
 
     # ================================================
@@ -168,8 +171,9 @@ async def judge_command_from_button(update: Update, context: ContextTypes.DEFAUL
         )
         return ConversationHandler.END
 
-    # Save chat_id for later use
+    # Save chat_id and user_id for later use
     context.user_data['judge_chat_id'] = chat.id
+    context.user_data['judge_user_id'] = user.id
 
     # Create cancel button
     keyboard = InlineKeyboardMarkup([
@@ -198,10 +202,18 @@ async def receive_dispute_description(update: Update, context: ContextTypes.DEFA
     """
     user = update.effective_user
     chat_id = context.user_data.get('judge_chat_id')
+    initiator_user_id = context.user_data.get('judge_user_id')
     dispute_text = update.message.text.strip()
 
     # LOG: State handler called
     logger.info(f"[JUDGE CONV] State handler AWAITING_DISPUTE_DESCRIPTION: received description from user {user.id}, length={len(dispute_text)}")
+
+    # SECURITY: Verify that the message is from the user who initiated the judge command
+    # This prevents other users from hijacking the conversation
+    if initiator_user_id and user.id != initiator_user_id:
+        logger.warning(f"[JUDGE CONV] User {user.id} tried to submit dispute description for judge initiated by user {initiator_user_id} - ignoring")
+        # Silently ignore - don't send error message to avoid spam in group chat
+        return AWAITING_DISPUTE_DESCRIPTION
 
     # Validate description length
     if len(dispute_text) < 10:
@@ -258,6 +270,7 @@ async def cancel_judge(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     # Clear context
     context.user_data.pop('judge_dispute_text', None)
     context.user_data.pop('judge_chat_id', None)
+    context.user_data.pop('judge_user_id', None)
 
     await update.message.reply_text(
         "❌ Судейство отменено.\n\n"
@@ -292,6 +305,7 @@ async def cancel_judge_inline(update: Update, context: ContextTypes.DEFAULT_TYPE
     # Clear context
     context.user_data.pop('judge_dispute_text', None)
     context.user_data.pop('judge_chat_id', None)
+    context.user_data.pop('judge_user_id', None)
 
     await query.edit_message_text(
         "❌ Судейство отменено.\n\n"
@@ -319,6 +333,7 @@ async def handle_judge_cancel_callback(update: Update, context: ContextTypes.DEF
     # Clear context
     context.user_data.pop('judge_dispute_text', None)
     context.user_data.pop('judge_chat_id', None)
+    context.user_data.pop('judge_user_id', None)
 
     await query.edit_message_text(
         "❌ Судейство отменено.\n\n"
@@ -478,6 +493,7 @@ async def handle_judge_personality_callback(update: Update, context: ContextType
         # Clear context
         context.user_data.pop('judge_dispute_text', None)
         context.user_data.pop('judge_chat_id', None)
+        context.user_data.pop('judge_user_id', None)
 
         # LOG: Success
         logger.info(f"[JUDGE CONV] Verdict generated successfully for user {user.id} in chat {chat_id} using personality {personality.name}")

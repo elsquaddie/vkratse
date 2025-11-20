@@ -385,6 +385,7 @@ def create_bot_application():
         ],
         name="judge_conversation",
         persistent=True,  # Enable persistence for serverless environment
+        per_user=True,  # Track conversation state per user, not per chat - prevents other users from hijacking the conversation
         conversation_timeout=config.CONVERSATION_TIMEOUT  # Auto-cancel after 10 minutes of inactivity
     )
     app.add_handler(judge_conv)

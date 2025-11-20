@@ -401,7 +401,8 @@ async def summary_timeframe_callback(update: Update, context: ContextTypes.DEFAU
     user = query.from_user
     db = DBService()
 
-    await query.answer()
+    # NOTE: Do NOT call query.answer() here - it will timeout on long processing
+    # First edit_message_text in _execute_summary will automatically close the loading indicator
 
     # Parse callback data
     try:
@@ -458,6 +459,17 @@ async def _execute_summary(
         context: Bot context
     """
     from telegram.error import BadRequest
+
+    # IMPORTANT: Immediately show loading message to close callback query
+    # This prevents "Query is too old" error during long processing
+    try:
+        await query.message.edit_text(
+            f"⏳ Готовлю саммари...\n\n"
+            f"🎭 Личность: {personality.emoji} {personality.display_name}"
+        )
+    except BadRequest as e:
+        if "message is not modified" not in str(e).lower():
+            raise
 
     db = DBService()
     ai = AIService()

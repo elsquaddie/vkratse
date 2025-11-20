@@ -344,7 +344,8 @@ async def handle_judge_personality_callback(update: Update, context: ContextType
     from utils.security import verify_string_signature
 
     query = update.callback_query
-    await query.answer()
+    # NOTE: Do NOT call query.answer() here - it will timeout on long processing
+    # First edit_message_text will automatically close the loading indicator
 
     user = query.from_user
     db = DBService()
@@ -381,6 +382,13 @@ async def handle_judge_personality_callback(update: Update, context: ContextType
 
         logger.info(f"[JUDGE SIGNATURE CHECK] SUCCESS for judge_personality")
 
+        # IMPORTANT: Immediately show loading message to close callback query
+        # This prevents "Query is too old" error during long processing
+        await query.edit_message_text(
+            "⚖️ Анализирую спор и готовлю вердикт...\n\n"
+            "⏳ Это может занять несколько секунд"
+        )
+
         # Get dispute description from context
         dispute_text = context.user_data.get('judge_dispute_text')
         if not dispute_text:
@@ -399,11 +407,10 @@ async def handle_judge_personality_callback(update: Update, context: ContextType
 
         # Check if personality is blocked
         if personality.is_blocked:
-            await query.answer(
+            await query.edit_message_text(
                 "⚠️ Эта личность заблокирована.\n\n"
                 "Причина: ты вышел из группы проекта.\n"
-                "Вернись в группу, чтобы разблокировать её!",
-                show_alert=True
+                "Вернись в группу, чтобы разблокировать её!"
             )
             return
 
@@ -427,11 +434,11 @@ async def handle_judge_personality_callback(update: Update, context: ContextType
             )
             return
 
-        # Get recent messages for context
-        messages = db.get_messages(chat_id=chat_id, limit=50)
+        # Get recent messages for context (reduced from 50 to 30 to avoid Vercel timeout)
+        messages = db.get_messages(chat_id=chat_id, limit=30)
         logger.info(f"[JUDGE] Analyzing {len(messages)} messages from group chat")
 
-        # Update message to show processing
+        # Update message with personality info
         await query.edit_message_text(
             f"⚖️ {personality.display_name} размышляет над спором...\n\n"
             f"Спор: {dispute_text[:100]}{'...' if len(dispute_text) > 100 else ''}"

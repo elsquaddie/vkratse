@@ -380,6 +380,34 @@ def create_bot_application():
     app.add_handler(CommandHandler(config.COMMAND_CHAT, chat_command))
     app.add_handler(CommandHandler(config.COMMAND_STOP, stop_command))
 
+    # IMPORTANT: Direct chat handlers MUST be registered BEFORE ConversationHandlers
+    # Otherwise ConversationHandler may intercept callbacks
+
+    # Handle /start menu callbacks (including payment callbacks)
+    # NOTE: "group_judge" removed - now handled exclusively by ConversationHandler
+    app.add_handler(CallbackQueryHandler(
+        handle_start_menu_callback,
+        pattern="^(direct_chat|setup_personality|dm_summary|group_summary|back_to_main|show_premium|buy_pro|buy_pro_card|buy_pro_stars|buy_pro_tribute|cancel_subscription|confirm_cancel_subscription):"
+    ))
+
+    # Handle personality selection callbacks
+    app.add_handler(CallbackQueryHandler(
+        handle_personality_selection,
+        pattern="^sel_pers:"
+    ))
+
+    # Handle group chat session start callback
+    app.add_handler(CallbackQueryHandler(
+        handle_start_chat_callback,
+        pattern="^start_chat:"
+    ))
+
+    # Handle group chat session end callback
+    app.add_handler(CallbackQueryHandler(
+        handle_end_group_chat_callback,
+        pattern="^end_group_chat:"
+    ))
+
     # Judge command with ConversationHandler (groups only)
     judge_conv = ConversationHandler(
         entry_points=[
@@ -484,33 +512,8 @@ def create_bot_application():
     )
     app.add_handler(personality_conv)
 
-    # Direct chat handlers (Phase 2)
-    # Handle /start menu callbacks (including payment callbacks)
-    # NOTE: "group_judge" removed - now handled exclusively by ConversationHandler
-    app.add_handler(CallbackQueryHandler(
-        handle_start_menu_callback,
-        pattern="^(direct_chat|setup_personality|dm_summary|group_summary|back_to_main|show_premium|buy_pro|buy_pro_card|buy_pro_stars|buy_pro_tribute|cancel_subscription|confirm_cancel_subscription):"
-    ))
-
-    # Handle personality selection callbacks
-    app.add_handler(CallbackQueryHandler(
-        handle_personality_selection,
-        pattern="^sel_pers:"
-    ))
-
-    # NOTE: "pers:create_start" callback is handled by personality_conv ConversationHandler above
-
-    # Handle group chat session start callback
-    app.add_handler(CallbackQueryHandler(
-        handle_start_chat_callback,
-        pattern="^start_chat:"
-    ))
-
-    # Handle group chat session end callback
-    app.add_handler(CallbackQueryHandler(
-        handle_end_group_chat_callback,
-        pattern="^end_group_chat:"
-    ))
+    # NOTE: Direct chat handlers have been moved BEFORE ConversationHandlers (see above)
+    # This prevents ConversationHandler from intercepting callbacks
 
     # Handle direct messages in private chats (must be after ConversationHandler)
     app.add_handler(MessageHandler(

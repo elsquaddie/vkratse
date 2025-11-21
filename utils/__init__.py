@@ -16,7 +16,13 @@ from .cooldown import check_cooldown, set_cooldown
 from .rate_limit import check_rate_limit
 from .validators import validate_chat_access, extract_mentions, is_valid_personality_name
 from .time_parser import parse_time_argument, get_default_period
-from .personality_menu import build_personality_menu, get_current_personality_display
+from .personality_menu import (
+    build_personality_menu,
+    get_current_personality_display,
+    save_personality_menu_context,
+    get_personality_menu_context,
+    restore_personality_menu_from_context
+)
 
 __all__ = [
     'create_signature',
@@ -36,5 +42,8 @@ __all__ = [
     'parse_time_argument',
     'get_default_period',
     'build_personality_menu',
-    'get_current_personality_display'
+    'get_current_personality_display',
+    'save_personality_menu_context',
+    'get_personality_menu_context',
+    'restore_personality_menu_from_context'
 ]

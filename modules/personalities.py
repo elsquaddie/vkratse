@@ -272,6 +272,10 @@ async def personality_callback(update: Update, context: ContextTypes.DEFAULT_TYP
             return ConversationHandler.END
 
         # Лимит не достигнут - продолжить создание
+        # Save chat_id to ensure responses come from the same chat
+        context.user_data['editing_chat_id'] = update.effective_chat.id
+        logger.info(f"[PERSONALITY CREATE] User {user.id} started creating personality in chat {update.effective_chat.id}")
+
         await query.message.reply_text(
             "🎭 Создание своей личности\n\n"
             "Шаг 1 из 2\n\n"
@@ -302,8 +306,11 @@ async def personality_callback(update: Update, context: ContextTypes.DEFAULT_TYP
             await query.answer("❌ Можно редактировать только свои личности", show_alert=True)
             return ConversationHandler.END
 
-        # Store personality name in context
+        # Store personality name AND chat_id in context
+        # This ensures we only accept responses from the same chat where editing started
         context.user_data['editing_personality'] = personality_name
+        context.user_data['editing_chat_id'] = update.effective_chat.id
+        logger.info(f"[PERSONALITY EDIT] User {user.id} started editing '{personality_name}' in chat {update.effective_chat.id}")
 
         # Show edit menu
         keyboard = [
@@ -488,6 +495,15 @@ async def receive_personality_name(update: Update, context: ContextTypes.DEFAULT
     user = update.effective_user
     name = update.message.text.strip().lower()
 
+    # IMPORTANT: Check if message is from the same chat where creation started
+    expected_chat_id = context.user_data.get('editing_chat_id')
+    current_chat_id = update.effective_chat.id
+
+    if expected_chat_id and expected_chat_id != current_chat_id:
+        # Message from different chat - ignore and continue waiting
+        logger.info(f"[PERSONALITY CREATE] Ignoring message from chat {current_chat_id}, expecting {expected_chat_id}")
+        return AWAITING_NAME
+
 
     # Validate name
     is_valid, error_msg = is_valid_personality_name(name)
@@ -577,6 +593,15 @@ async def receive_personality_description(update: Update, context: ContextTypes.
     name = context.user_data.get('personality_name')
     emoji = context.user_data.get('personality_emoji', '🎭')
 
+    # IMPORTANT: Check if message is from the same chat where creation started
+    expected_chat_id = context.user_data.get('editing_chat_id')
+    current_chat_id = update.effective_chat.id
+
+    if expected_chat_id and expected_chat_id != current_chat_id:
+        # Message from different chat - ignore and continue waiting
+        logger.info(f"[PERSONALITY CREATE] Ignoring description from chat {current_chat_id}, expecting {expected_chat_id}")
+        return AWAITING_DESCRIPTION
+
     if not name:
         await update.message.reply_text("❌ Ошибка: имя личности не найдено. Начни заново с /личность")
         return ConversationHandler.END
@@ -629,6 +654,7 @@ async def receive_personality_description(update: Update, context: ContextTypes.
     context.user_data.pop('personality_name', None)
     context.user_data.pop('personality_emoji', None)
     context.user_data.pop('personality_description', None)
+    context.user_data.pop('editing_chat_id', None)
 
     return ConversationHandler.END
 
@@ -664,6 +690,7 @@ async def edit_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         context.user_data.pop('personality_name', None)
         context.user_data.pop('personality_emoji', None)
         context.user_data.pop('personality_description', None)
+        context.user_data.pop('editing_chat_id', None)
         return ConversationHandler.END
 
     # Get personality name
@@ -722,6 +749,15 @@ async def receive_edited_name(update: Update, context: ContextTypes.DEFAULT_TYPE
     new_name = update.message.text.strip().lower()
     personality_name = context.user_data.get('editing_personality')
 
+    # IMPORTANT: Check if message is from the same chat where editing started
+    expected_chat_id = context.user_data.get('editing_chat_id')
+    current_chat_id = update.effective_chat.id
+
+    if expected_chat_id and expected_chat_id != current_chat_id:
+        # Message from different chat - ignore and continue waiting
+        logger.info(f"[PERSONALITY EDIT] Ignoring name from chat {current_chat_id}, expecting {expected_chat_id}")
+        return AWAITING_EDIT_NAME
+
     if not personality_name:
         await update.message.reply_text("❌ Ошибка: личность не найдена. Начни заново.")
         return ConversationHandler.END
@@ -758,6 +794,7 @@ async def receive_edited_name(update: Update, context: ContextTypes.DEFAULT_TYPE
         context.user_data.pop('personality_name', None)
         context.user_data.pop('personality_emoji', None)
         context.user_data.pop('personality_description', None)
+        context.user_data.pop('editing_chat_id', None)
 
         # Restore personality menu with saved context (returns to original menu)
         from utils import restore_personality_menu_from_context
@@ -777,6 +814,15 @@ async def receive_edited_emoji(update: Update, context: ContextTypes.DEFAULT_TYP
     user = update.effective_user
     new_emoji = update.message.text.strip()
     personality_name = context.user_data.get('editing_personality')
+
+    # IMPORTANT: Check if message is from the same chat where editing started
+    expected_chat_id = context.user_data.get('editing_chat_id')
+    current_chat_id = update.effective_chat.id
+
+    if expected_chat_id and expected_chat_id != current_chat_id:
+        # Message from different chat - ignore and continue waiting
+        logger.info(f"[PERSONALITY EDIT] Ignoring emoji from chat {current_chat_id}, expecting {expected_chat_id}")
+        return AWAITING_EDIT_EMOJI
 
     if not personality_name:
         await update.message.reply_text("❌ Ошибка: личность не найдена. Начни заново.")
@@ -805,6 +851,7 @@ async def receive_edited_emoji(update: Update, context: ContextTypes.DEFAULT_TYP
         context.user_data.pop('personality_name', None)
         context.user_data.pop('personality_emoji', None)
         context.user_data.pop('personality_description', None)
+        context.user_data.pop('editing_chat_id', None)
 
         # Restore personality menu with saved context (returns to original menu)
         from utils import restore_personality_menu_from_context
@@ -824,6 +871,15 @@ async def receive_edited_description(update: Update, context: ContextTypes.DEFAU
     user = update.effective_user
     new_description = update.message.text.strip()
     personality_name = context.user_data.get('editing_personality')
+
+    # IMPORTANT: Check if message is from the same chat where editing started
+    expected_chat_id = context.user_data.get('editing_chat_id')
+    current_chat_id = update.effective_chat.id
+
+    if expected_chat_id and expected_chat_id != current_chat_id:
+        # Message from different chat - ignore and continue waiting
+        logger.info(f"[PERSONALITY EDIT] Ignoring description from chat {current_chat_id}, expecting {expected_chat_id}")
+        return AWAITING_EDIT_DESCRIPTION
 
     if not personality_name:
         await update.message.reply_text("❌ Ошибка: личность не найдена. Начни заново.")
@@ -854,6 +910,7 @@ async def receive_edited_description(update: Update, context: ContextTypes.DEFAU
         context.user_data.pop('personality_name', None)
         context.user_data.pop('personality_emoji', None)
         context.user_data.pop('personality_description', None)
+        context.user_data.pop('editing_chat_id', None)
 
         # Restore personality menu with saved context (returns to original menu)
         from utils import restore_personality_menu_from_context
@@ -882,5 +939,6 @@ async def cancel_personality_creation(update: Update, context: ContextTypes.DEFA
     context.user_data.pop('personality_name', None)
     context.user_data.pop('personality_emoji', None)
     context.user_data.pop('personality_description', None)
+    context.user_data.pop('editing_chat_id', None)
 
     return ConversationHandler.END

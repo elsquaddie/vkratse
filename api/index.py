@@ -322,9 +322,21 @@ def create_bot_application():
     # Create persistence for ConversationHandler
     persistence = SupabasePersistence()
 
+    # Configure HTTP request with custom timeouts for faster retries
+    # Default is 5 seconds connect, 5 seconds read - too long for serverless
+    from telegram.request import HTTPXRequest
+    request = HTTPXRequest(
+        connection_pool_size=8,
+        connect_timeout=3.0,  # 3 seconds to establish connection (was 5)
+        read_timeout=5.0,     # 5 seconds to read response (was 5)
+        write_timeout=5.0,    # 5 seconds to write request (was 5)
+        pool_timeout=3.0      # 3 seconds to get connection from pool (was 1)
+    )
+
     app = Application.builder()\
         .token(config.TELEGRAM_BOT_TOKEN)\
         .persistence(persistence)\
+        .request(request)\
         .build()
 
     # Initialize subscription service (needed for personality limits, etc.)
@@ -467,6 +479,7 @@ def create_bot_application():
         name="personality_conversation",
         persistent=True,  # Enable persistence for serverless environment
         per_user=True,  # Track conversation state per user, not per chat - prevents other users from hijacking the conversation
+        per_chat=False,  # IMPORTANT: Allow editing personalities from any chat (groups or DM)
         conversation_timeout=config.CONVERSATION_TIMEOUT  # Auto-cancel after 10 minutes of inactivity
     )
     app.add_handler(personality_conv)
@@ -579,6 +592,7 @@ async def process_update(update_data: dict):
     Process a single update from Telegram
 
     FIX: Creating new Application per request to avoid event loop issues
+    FIX: Retry app.initialize() on timeout to handle transient network issues
     """
     if not bot_initialized:
         log("⚠️ Cannot process update: bot not initialized")
@@ -591,9 +605,23 @@ async def process_update(update_data: dict):
         # Create new Application for this request
         app = create_bot_application()
 
-        # Initialize it
-        await app.initialize()
-        verbose_log("✅ Application initialized for this request")
+        # Initialize with retry on timeout (max 3 attempts: 0s, 0.5s, 1s = 1.5s total)
+        from telegram.error import TimedOut
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                await app.initialize()
+                verbose_log(f"✅ Application initialized (attempt {attempt + 1}/{max_retries})")
+                break
+            except TimedOut as e:
+                if attempt < max_retries - 1:
+                    wait_time = 0.5 * attempt  # 0s, 0.5s, 1s
+                    logger.warning(f"Timeout on initialize (attempt {attempt + 1}/{max_retries}), retrying in {wait_time}s...")
+                    if wait_time > 0:
+                        await asyncio.sleep(wait_time)
+                else:
+                    # Last attempt failed - re-raise
+                    raise
 
         # Process the update
         update = Update.de_json(update_data, app.bot)

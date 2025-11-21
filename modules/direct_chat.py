@@ -179,25 +179,69 @@ async def handle_personality_selection(
             # Generate greeting for custom personalities without pre-set greeting
             greeting = ai_service.generate_greeting(personality)
 
-        # Send greeting with "Back to menu" button
-        greeting_text = f"✨ Выбрана личность: {personality.display_name} {personality.emoji}\n\n{greeting}\n\n💬 Теперь можешь писать мне - я буду отвечать в этом стиле!"
+        # Check chat type to determine behavior
+        chat_type = update.effective_chat.type
+        chat_id = update.effective_chat.id
 
-        # Add inline keyboard with "Back to menu" button
-        keyboard = [[InlineKeyboardButton(
-            "◀️ Назад в меню",
-            callback_data=sign_callback_data("back_to_main")
-        )]]
-        reply_markup = InlineKeyboardMarkup(keyboard)
+        if chat_type in [ChatType.GROUP, ChatType.SUPERGROUP]:
+            # GROUP CHAT: Create session (same as /chat command)
+            from datetime import datetime
 
-        await query.edit_message_text(greeting_text, reply_markup=reply_markup)
+            # Create active session in bot_data (in-memory storage)
+            if 'group_chat_sessions' not in context.bot_data:
+                context.bot_data['group_chat_sessions'] = {}
 
-        # Log analytics
-        db_service.log_event(
-            user_id=user_id,
-            chat_id=update.effective_chat.id,
-            event_type="personality_selected",
-            metadata={"personality": personality.name}
-        )
+            session_key = (chat_id, user_id)
+            context.bot_data['group_chat_sessions'][session_key] = {
+                'personality': personality.name,
+                'started_at': datetime.now()
+            }
+
+            # Send session started message with "End session" button
+            response_text = (
+                f"✅ Начата сессия общения с {personality.display_name} {personality.emoji}\n\n"
+                f"{greeting}\n\n"
+                f"💬 Пиши мне через reply на мои сообщения или @упоминание.\n"
+                f"⏱️ Сессия автоматически завершится через {config.DIRECT_CHAT_SESSION_TIMEOUT // 60} минут."
+            )
+
+            # Add inline keyboard with "End session" button
+            keyboard = [[InlineKeyboardButton(
+                "🛑 Завершить сессию",
+                callback_data=sign_callback_data(f"end_group_chat:{user_id}")
+            )]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+
+            await query.edit_message_text(response_text, reply_markup=reply_markup)
+
+            # Log analytics
+            db_service.log_event(
+                user_id=user_id,
+                chat_id=chat_id,
+                event_type="group_chat_session_started",
+                metadata={"personality": personality.name, "source": "menu"}
+            )
+
+        else:
+            # PRIVATE CHAT: Just select personality (no session needed)
+            greeting_text = f"✨ Выбрана личность: {personality.display_name} {personality.emoji}\n\n{greeting}\n\n💬 Теперь можешь писать мне - я буду отвечать в этом стиле!"
+
+            # Add inline keyboard with "Back to menu" button
+            keyboard = [[InlineKeyboardButton(
+                "◀️ Назад в меню",
+                callback_data=sign_callback_data("back_to_main")
+            )]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+
+            await query.edit_message_text(greeting_text, reply_markup=reply_markup)
+
+            # Log analytics
+            db_service.log_event(
+                user_id=user_id,
+                chat_id=chat_id,
+                event_type="personality_selected",
+                metadata={"personality": personality.name, "source": "menu"}
+            )
 
     except Exception as e:
         logger.error(f"Error handling personality selection: {e}")
@@ -526,8 +570,11 @@ async def handle_start_chat_callback(
     context: ContextTypes.DEFAULT_TYPE
 ) -> None:
     """
-    Handle callback when user selects personality for group chat session.
-    Creates an active session and sends greeting message.
+    Handle callback when user selects personality for group chat session via /chat command.
+    Creates an active session and sends greeting message with "End session" button.
+
+    Note: This is only used for /chat command flow.
+    Menu flow (/start -> "Общаться напрямую") uses handle_personality_selection instead.
 
     Args:
         update: Telegram update object

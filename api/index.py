@@ -425,8 +425,11 @@ def create_bot_application():
         ],
         name="judge_conversation",
         persistent=True,  # Enable persistence for serverless environment
-        per_user=True,  # Track conversation state per user, not per chat - prevents other users from hijacking the conversation
-        conversation_timeout=config.CONVERSATION_TIMEOUT  # Auto-cancel after 10 minutes of inactivity
+        per_user=True,  # Track conversation state per user - prevents other users from hijacking the conversation
+        per_chat=True,  # Track per chat - important for groups (each group has separate state)
+        per_message=True,  # Track per message - required for CallbackQueryHandler in entry_points
+        conversation_timeout=config.CONVERSATION_TIMEOUT,  # Auto-cancel after 10 minutes of inactivity
+        block=False  # IMPORTANT: Don't block other handlers when conversation is not active
     )
     app.add_handler(judge_conv)
     verbose_log("✅ Judge ConversationHandler registered")
@@ -506,9 +509,11 @@ def create_bot_application():
         ],
         name="personality_conversation",
         persistent=True,  # Enable persistence for serverless environment
-        per_user=True,  # Track conversation state per user, not per chat - prevents other users from hijacking the conversation
+        per_user=True,  # Track conversation state per user - prevents other users from hijacking the conversation
         per_chat=False,  # IMPORTANT: Allow editing personalities from any chat (groups or DM)
-        conversation_timeout=config.CONVERSATION_TIMEOUT  # Auto-cancel after 10 minutes of inactivity
+        per_message=True,  # Track per message - required for CallbackQueryHandler in entry_points
+        conversation_timeout=config.CONVERSATION_TIMEOUT,  # Auto-cancel after 10 minutes of inactivity
+        block=False  # IMPORTANT: Don't block other handlers when conversation is not active
     )
     app.add_handler(personality_conv)
 

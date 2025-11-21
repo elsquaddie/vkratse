@@ -467,6 +467,7 @@ def create_bot_application():
         name="personality_conversation",
         persistent=True,  # Enable persistence for serverless environment
         per_user=True,  # Track conversation state per user, not per chat - prevents other users from hijacking the conversation
+        per_chat=False,  # IMPORTANT: Allow editing personalities from any chat (groups or DM)
         conversation_timeout=config.CONVERSATION_TIMEOUT  # Auto-cancel after 10 minutes of inactivity
     )
     app.add_handler(personality_conv)

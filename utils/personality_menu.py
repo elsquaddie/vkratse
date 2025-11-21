@@ -29,7 +29,7 @@ def save_personality_menu_context(
     user_data['personality_menu_context'] = {
         'callback_prefix': callback_prefix,
         'extra_data': extra_data or {},
-        'updated_at': datetime.now()
+        'updated_at': datetime.now().isoformat()  # Convert to ISO string for JSON serialization
     }
 
 

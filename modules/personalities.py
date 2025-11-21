@@ -625,9 +625,10 @@ async def receive_personality_description(update: Update, context: ContextTypes.
         f"Попробуй команду /{config.COMMAND_SUMMARY} в своём чате!"
     )
 
-
-    # Clear context
-    context.user_data.clear()
+    # Clear only conversation-specific data, not ConversationHandler state
+    context.user_data.pop('personality_name', None)
+    context.user_data.pop('personality_emoji', None)
+    context.user_data.pop('personality_description', None)
 
     return ConversationHandler.END
 
@@ -657,7 +658,12 @@ async def edit_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
             "❌ Редактирование отменено.\n\n"
             f"Используй /{config.COMMAND_PERSONALITY} для управления личностями."
         )
-        context.user_data.clear()
+        # Clear only conversation-specific data, not ConversationHandler state
+        context.user_data.pop('editing_personality', None)
+        context.user_data.pop('editing_field', None)
+        context.user_data.pop('personality_name', None)
+        context.user_data.pop('personality_emoji', None)
+        context.user_data.pop('personality_description', None)
         return ConversationHandler.END
 
     # Get personality name
@@ -746,6 +752,13 @@ async def receive_edited_name(update: Update, context: ContextTypes.DEFAULT_TYPE
     )
 
     if success:
+        # Clear only conversation-specific data, not ConversationHandler state
+        context.user_data.pop('editing_personality', None)
+        context.user_data.pop('editing_field', None)
+        context.user_data.pop('personality_name', None)
+        context.user_data.pop('personality_emoji', None)
+        context.user_data.pop('personality_description', None)
+
         # Restore personality menu with saved context (returns to original menu)
         from utils import restore_personality_menu_from_context
         await restore_personality_menu_from_context(
@@ -756,7 +769,6 @@ async def receive_edited_name(update: Update, context: ContextTypes.DEFAULT_TYPE
     else:
         await update.message.reply_text("❌ Ошибка при обновлении. Попробуй позже.")
 
-    context.user_data.clear()
     return ConversationHandler.END
 
 
@@ -787,6 +799,13 @@ async def receive_edited_emoji(update: Update, context: ContextTypes.DEFAULT_TYP
     )
 
     if success:
+        # Clear only conversation-specific data, not ConversationHandler state
+        context.user_data.pop('editing_personality', None)
+        context.user_data.pop('editing_field', None)
+        context.user_data.pop('personality_name', None)
+        context.user_data.pop('personality_emoji', None)
+        context.user_data.pop('personality_description', None)
+
         # Restore personality menu with saved context (returns to original menu)
         from utils import restore_personality_menu_from_context
         await restore_personality_menu_from_context(
@@ -797,7 +816,6 @@ async def receive_edited_emoji(update: Update, context: ContextTypes.DEFAULT_TYP
     else:
         await update.message.reply_text("❌ Ошибка при обновлении. Попробуй позже.")
 
-    context.user_data.clear()
     return ConversationHandler.END
 
 
@@ -830,6 +848,13 @@ async def receive_edited_description(update: Update, context: ContextTypes.DEFAU
     )
 
     if success:
+        # Clear only conversation-specific data, not ConversationHandler state
+        context.user_data.pop('editing_personality', None)
+        context.user_data.pop('editing_field', None)
+        context.user_data.pop('personality_name', None)
+        context.user_data.pop('personality_emoji', None)
+        context.user_data.pop('personality_description', None)
+
         # Restore personality menu with saved context (returns to original menu)
         from utils import restore_personality_menu_from_context
         await restore_personality_menu_from_context(
@@ -840,7 +865,6 @@ async def receive_edited_description(update: Update, context: ContextTypes.DEFAU
     else:
         await update.message.reply_text("❌ Ошибка при обновлении. Попробуй позже.")
 
-    context.user_data.clear()
     return ConversationHandler.END
 
 
@@ -852,5 +876,11 @@ async def cancel_personality_creation(update: Update, context: ContextTypes.DEFA
         f"Используй /{config.COMMAND_PERSONALITY} чтобы выбрать существующую."
     )
 
-    context.user_data.clear()
+    # Clear only conversation-specific data, not ConversationHandler state
+    context.user_data.pop('editing_personality', None)
+    context.user_data.pop('editing_field', None)
+    context.user_data.pop('personality_name', None)
+    context.user_data.pop('personality_emoji', None)
+    context.user_data.pop('personality_description', None)
+
     return ConversationHandler.END

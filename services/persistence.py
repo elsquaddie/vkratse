@@ -39,26 +39,34 @@ class SupabasePersistence(BasePersistence):
                 .eq('conversation_name', name)\
                 .execute()
 
-            # Convert to ConversationDict format: {(chat_id, user_id): state}
+            # Convert to ConversationDict format: {(user_id,): state} for per_chat=False
+            # or {(chat_id, user_id): state} for per_chat=True
             conversations = {}
             for row in response.data:
-                # user_id is stored as "chat_id:user_id" composite key
+                # user_id is stored as "user_id" (per_chat=False) or "chat_id:user_id" (per_chat=True)
                 composite_key = row['user_id']
                 state = row.get('state')
 
-                if state and ':' in str(composite_key):
-                    # Parse composite key: "chat_id:user_id"
-                    parts = str(composite_key).split(':')
-                    if len(parts) == 2:
-                        try:
-                            chat_id = int(parts[0])
-                            user_id = int(parts[1])
-                            state_int = int(state)
-                            conversations[(chat_id, user_id)] = state_int
-                        except (ValueError, TypeError) as e:
-                            logger.warning(f"Invalid composite key or state '{composite_key}' / '{state}': {e}")
-                    else:
-                        logger.warning(f"Invalid composite key format '{composite_key}', expected 'chat_id:user_id'")
+                if state:
+                    try:
+                        state_int = int(state)
+
+                        if ':' in str(composite_key):
+                            # per_chat=True: "chat_id:user_id" → (chat_id, user_id)
+                            parts = str(composite_key).split(':')
+                            if len(parts) == 2:
+                                chat_id = int(parts[0])
+                                user_id = int(parts[1])
+                                conversations[(chat_id, user_id)] = state_int
+                            else:
+                                logger.warning(f"Invalid composite key format '{composite_key}', expected 'chat_id:user_id'")
+                        else:
+                            # per_chat=False: "user_id" → (user_id,)
+                            user_id = int(composite_key)
+                            conversations[(user_id,)] = state_int
+
+                    except (ValueError, TypeError) as e:
+                        logger.warning(f"Invalid composite key or state '{composite_key}' / '{state}': {e}")
 
             return conversations
 
@@ -74,11 +82,19 @@ class SupabasePersistence(BasePersistence):
     ) -> None:
         """Save conversation state to database"""
         try:
-            # key is (chat_id, user_id) for group chats or (user_id, user_id) for DMs
-            # Store as composite key "chat_id:user_id"
-            chat_id = key[0] if len(key) >= 1 else 0
-            user_id = key[-1]  # Last element is always user_id
-            composite_key = f"{chat_id}:{user_id}"
+            # key format depends on per_chat setting:
+            # - per_chat=False: (user_id,) - tuple with single element
+            # - per_chat=True:  (chat_id, user_id) - tuple with two elements
+
+            if len(key) == 1:
+                # per_chat=False: store as "user_id"
+                composite_key = str(key[0])
+            elif len(key) == 2:
+                # per_chat=True: store as "chat_id:user_id"
+                composite_key = f"{key[0]}:{key[1]}"
+            else:
+                logger.error(f"Invalid conversation key format: {key}")
+                return
 
             if new_state is None:
                 # Delete conversation
@@ -87,8 +103,9 @@ class SupabasePersistence(BasePersistence):
                     .eq('user_id', composite_key)\
                     .eq('conversation_name', name)\
                     .execute()
+                logger.debug(f"[PERSISTENCE] Deleted conversation '{name}' for key {key}")
             else:
-                # Upsert conversation state (use composite key as user_id)
+                # Upsert conversation state
                 self.db.client.table('conversation_states')\
                     .upsert({
                         'user_id': composite_key,
@@ -97,6 +114,7 @@ class SupabasePersistence(BasePersistence):
                         'updated_at': datetime.now(timezone.utc).isoformat()
                     })\
                     .execute()
+                logger.debug(f"[PERSISTENCE] Saved conversation '{name}' for key {key}: state={new_state}")
 
             # Cleanup old conversations (older than 24 hours)
             threshold = datetime.now(timezone.utc) - timedelta(hours=24)
